@@ -11,6 +11,16 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -34,12 +44,12 @@ import {
   Edit,
 } from 'lucide-react';
 import MetricCard from '@/components/dashboard/MetricCard';
+import PlanningWizard from '@/components/planning/PlanningWizard';
 import {
   format,
   startOfWeek,
   endOfWeek,
   eachDayOfInterval,
-  addDays,
   startOfMonth,
   endOfMonth,
 } from 'date-fns';
@@ -86,7 +96,9 @@ export default function Tarefas() {
   const [weeklyPlanning, setWeeklyPlanning] = useState<WeeklyPlanning | null>(null);
   const [selectedDay, setSelectedDay] = useState(0);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [isPlanningMode, setIsPlanningMode] = useState(false);
+  const [isPlanningWizardOpen, setIsPlanningWizardOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -186,36 +198,49 @@ export default function Tarefas() {
     const weekEndStr = format(weekEnd, 'yyyy-MM-dd');
 
     if (!weeklyPlanning) {
-      await supabase.from('weekly_planning').insert({
-        user_id: user.id,
-        week_start: weekStartStr,
-        week_end: weekEndStr,
-      });
+      const { data } = await supabase
+        .from('weekly_planning')
+        .insert({
+          user_id: user.id,
+          week_start: weekStartStr,
+          week_end: weekEndStr,
+        })
+        .select()
+        .single();
+
+      if (data) {
+        setWeeklyPlanning(data);
+      }
     }
 
-    setIsPlanningMode(true);
+    setIsPlanningWizardOpen(true);
   };
 
-  const handleFinishPlanning = async () => {
-    if (!user || !weeklyPlanning) return;
-
-    await supabase
-      .from('weekly_planning')
-      .update({ is_completed: true, completed_at: new Date().toISOString() })
-      .eq('id', weeklyPlanning.id);
-
-    toast({ title: 'Planejamento semanal concluído!' });
-    setIsPlanningMode(false);
+  const handlePlanningComplete = () => {
+    setIsPlanningWizardOpen(false);
     fetchData();
   };
 
   const handleAddTask = (dayIndex: number) => {
     setSelectedDay(dayIndex);
+    setEditingTask(null);
     setFormData({
       title: '',
       description: '',
       task_type: 'other',
       scheduled_time: '',
+    });
+    setIsFormOpen(true);
+  };
+
+  const handleEditTask = (task: Task, dayIndex: number) => {
+    setSelectedDay(dayIndex);
+    setEditingTask(task);
+    setFormData({
+      title: task.title,
+      description: task.description || '',
+      task_type: task.task_type,
+      scheduled_time: task.scheduled_time || '',
     });
     setIsFormOpen(true);
   };
@@ -227,22 +252,35 @@ export default function Tarefas() {
     setLoading(true);
 
     const selectedDate = weekDays[selectedDay];
-    const { error } = await supabase.from('tasks').insert({
+    const taskData = {
       user_id: user.id,
       title: formData.title,
       description: formData.description || null,
       task_type: formData.task_type,
       scheduled_date: format(selectedDate, 'yyyy-MM-dd'),
       scheduled_time: formData.scheduled_time || null,
-    });
+    };
+
+    let error;
+    if (editingTask) {
+      const result = await supabase
+        .from('tasks')
+        .update(taskData)
+        .eq('id', editingTask.id);
+      error = result.error;
+    } else {
+      const result = await supabase.from('tasks').insert(taskData);
+      error = result.error;
+    }
 
     setLoading(false);
 
     if (error) {
-      toast({ title: 'Erro ao criar tarefa', variant: 'destructive' });
+      toast({ title: 'Erro ao salvar tarefa', variant: 'destructive' });
     } else {
-      toast({ title: 'Tarefa criada com sucesso' });
+      toast({ title: `Tarefa ${editingTask ? 'atualizada' : 'criada'} com sucesso` });
       setIsFormOpen(false);
+      setEditingTask(null);
       fetchData();
     }
   };
@@ -264,8 +302,10 @@ export default function Tarefas() {
     }
   };
 
-  const handleDeleteTask = async (taskId: string) => {
-    const { error } = await supabase.from('tasks').delete().eq('id', taskId);
+  const handleDeleteTask = async () => {
+    if (!deleteTaskId) return;
+
+    const { error } = await supabase.from('tasks').delete().eq('id', deleteTaskId);
 
     if (error) {
       toast({ title: 'Erro ao excluir tarefa', variant: 'destructive' });
@@ -273,6 +313,7 @@ export default function Tarefas() {
       toast({ title: 'Tarefa excluída' });
       fetchData();
     }
+    setDeleteTaskId(null);
   };
 
   const successRate = stats.totalMonth > 0
@@ -427,7 +468,14 @@ export default function Tarefas() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => handleDeleteTask(task.id)}
+                            onClick={() => handleEditTask(task, index)}
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setDeleteTaskId(task.id)}
                           >
                             <Trash2 className="w-4 h-4 text-destructive" />
                           </Button>
@@ -442,20 +490,25 @@ export default function Tarefas() {
         })}
       </Tabs>
 
-      {isPlanningMode && (
-        <div className="fixed bottom-6 right-6">
-          <Button onClick={handleFinishPlanning} size="lg" className="shadow-lg">
-            <CheckSquare className="w-5 h-5 mr-2" />
-            Finalizar Planejamento
-          </Button>
-        </div>
+      {/* Planning Wizard */}
+      {isPlanningWizardOpen && (
+        <PlanningWizard
+          weekStart={weekStart}
+          weekEnd={weekEnd}
+          existingTasks={tasks}
+          planningId={weeklyPlanning?.id || null}
+          onClose={() => setIsPlanningWizardOpen(false)}
+          onComplete={handlePlanningComplete}
+        />
       )}
 
       {/* Task Form Sheet */}
       <Sheet open={isFormOpen} onOpenChange={setIsFormOpen}>
         <SheetContent>
           <SheetHeader>
-            <SheetTitle className="font-display">Nova Tarefa</SheetTitle>
+            <SheetTitle className="font-display">
+              {editingTask ? 'Editar Tarefa' : 'Nova Tarefa'}
+            </SheetTitle>
           </SheetHeader>
           <form onSubmit={handleSubmit} className="space-y-6 mt-6">
             <div className="space-y-2">
@@ -523,11 +576,29 @@ export default function Tarefas() {
             </div>
 
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Salvando...' : 'Criar Tarefa'}
+              {loading ? 'Salvando...' : editingTask ? 'Salvar Alterações' : 'Criar Tarefa'}
             </Button>
           </form>
         </SheetContent>
       </Sheet>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteTaskId} onOpenChange={() => setDeleteTaskId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja deletar? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteTask} className="bg-destructive hover:bg-destructive/90">
+              Deletar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

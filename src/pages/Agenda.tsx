@@ -3,41 +3,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import {
   ChevronLeft,
   ChevronRight,
-  Plus,
-  Video,
-  FileText,
-  Users,
-  MoreHorizontal,
-  Trash2,
-  Edit,
 } from 'lucide-react';
 import {
   format,
@@ -45,7 +14,6 @@ import {
   endOfMonth,
   eachDayOfInterval,
   isSameMonth,
-  isSameDay,
   addMonths,
   subMonths,
   startOfWeek,
@@ -54,6 +22,7 @@ import {
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import DayTasksDialog from '@/components/agenda/DayTasksDialog';
 
 interface Task {
   id: string;
@@ -76,34 +45,13 @@ const taskTypeColors: Record<string, string> = {
   other: 'bg-task-other text-white',
 };
 
-const taskTypeLabels: Record<string, string> = {
-  meeting: 'Reunião',
-  content: 'Conteúdo',
-  prospecting: 'Prospecção',
-  steps: 'Por Etapas',
-  other: 'Outra',
-};
-
 export default function Agenda() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    task_type: 'other',
-    scheduled_time: '',
-    meeting_link: '',
-    contact_number: '',
-    lead_source: '',
-  });
-  const [loading, setLoading] = useState(false);
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [isDayDialogOpen, setIsDayDialogOpen] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -149,122 +97,13 @@ export default function Agenda() {
 
   const handleDayClick = (date: Date) => {
     setSelectedDate(date);
-    setEditingTask(null);
-    setFormData({
-      title: '',
-      description: '',
-      task_type: 'other',
-      scheduled_time: '',
-      meeting_link: '',
-      contact_number: '',
-      lead_source: '',
-    });
-    setIsFormOpen(true);
-  };
-
-  const handleTaskClick = (task: Task) => {
-    setSelectedTask(task);
-    setIsDetailOpen(true);
-  };
-
-  const handleEditTask = () => {
-    if (!selectedTask) return;
-    setEditingTask(selectedTask);
-    setSelectedDate(new Date(selectedTask.scheduled_date));
-    setFormData({
-      title: selectedTask.title,
-      description: selectedTask.description || '',
-      task_type: selectedTask.task_type,
-      scheduled_time: selectedTask.scheduled_time || '',
-      meeting_link: selectedTask.meeting_link || '',
-      contact_number: selectedTask.contact_number || '',
-      lead_source: selectedTask.lead_source || '',
-    });
-    setIsDetailOpen(false);
-    setIsFormOpen(true);
-  };
-
-  const handleDeleteTask = async () => {
-    if (!selectedTask) return;
-
-    const { error } = await supabase
-      .from('tasks')
-      .delete()
-      .eq('id', selectedTask.id);
-
-    if (error) {
-      toast({ title: 'Erro ao excluir tarefa', variant: 'destructive' });
-    } else {
-      toast({ title: 'Tarefa excluída com sucesso' });
-      setIsDetailOpen(false);
-      fetchTasks();
-    }
-  };
-
-  const handleToggleComplete = async () => {
-    if (!selectedTask) return;
-
-    const newStatus = selectedTask.status === 'completed' ? 'pending' : 'completed';
-    const { error } = await supabase
-      .from('tasks')
-      .update({
-        status: newStatus,
-        completed_at: newStatus === 'completed' ? new Date().toISOString() : null,
-      })
-      .eq('id', selectedTask.id);
-
-    if (error) {
-      toast({ title: 'Erro ao atualizar tarefa', variant: 'destructive' });
-    } else {
-      toast({ title: `Tarefa ${newStatus === 'completed' ? 'concluída' : 'reaberta'}` });
-      setIsDetailOpen(false);
-      fetchTasks();
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user || !selectedDate) return;
-
-    setLoading(true);
-
-    const taskData = {
-      user_id: user.id,
-      title: formData.title,
-      description: formData.description || null,
-      task_type: formData.task_type,
-      scheduled_date: format(selectedDate, 'yyyy-MM-dd'),
-      scheduled_time: formData.scheduled_time || null,
-      meeting_link: formData.meeting_link || null,
-      contact_number: formData.contact_number || null,
-      lead_source: formData.lead_source || null,
-    };
-
-    let error;
-    if (editingTask) {
-      const result = await supabase
-        .from('tasks')
-        .update(taskData)
-        .eq('id', editingTask.id);
-      error = result.error;
-    } else {
-      const result = await supabase.from('tasks').insert(taskData);
-      error = result.error;
-    }
-
-    setLoading(false);
-
-    if (error) {
-      toast({ title: 'Erro ao salvar tarefa', variant: 'destructive' });
-    } else {
-      toast({ title: `Tarefa ${editingTask ? 'atualizada' : 'criada'} com sucesso` });
-      setIsFormOpen(false);
-      fetchTasks();
-    }
+    setIsDayDialogOpen(true);
   };
 
   const days = getDaysInMonth();
   const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+  const selectedDayTasks = selectedDate ? getTasksForDay(selectedDate) : [];
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -334,14 +173,10 @@ export default function Agenda() {
                       <div
                         key={task.id}
                         className={cn(
-                          "text-xs px-1.5 py-0.5 rounded truncate cursor-pointer",
+                          "text-xs px-1.5 py-0.5 rounded truncate",
                           taskTypeColors[task.task_type],
                           task.status === 'completed' && "opacity-50 line-through"
                         )}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleTaskClick(task);
-                        }}
                       >
                         {task.title}
                       </div>
@@ -359,209 +194,16 @@ export default function Agenda() {
         </CardContent>
       </Card>
 
-      {/* Task Detail Dialog */}
-      <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="font-display">{selectedTask?.title}</DialogTitle>
-          </DialogHeader>
-          {selectedTask && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <Badge className={taskTypeColors[selectedTask.task_type]}>
-                  {taskTypeLabels[selectedTask.task_type]}
-                </Badge>
-                <Badge variant={selectedTask.status === 'completed' ? 'default' : 'secondary'}>
-                  {selectedTask.status === 'completed' ? 'Concluída' : 'Pendente'}
-                </Badge>
-              </div>
-
-              {selectedTask.description && (
-                <p className="text-muted-foreground">{selectedTask.description}</p>
-              )}
-
-              <div className="space-y-2 text-sm">
-                <p>
-                  <span className="font-medium">Data:</span>{' '}
-                  {format(new Date(selectedTask.scheduled_date), "dd 'de' MMMM", {
-                    locale: ptBR,
-                  })}
-                </p>
-                {selectedTask.scheduled_time && (
-                  <p>
-                    <span className="font-medium">Horário:</span>{' '}
-                    {selectedTask.scheduled_time.slice(0, 5)}
-                  </p>
-                )}
-                {selectedTask.meeting_link && (
-                  <p>
-                    <span className="font-medium">Link:</span>{' '}
-                    <a
-                      href={selectedTask.meeting_link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary hover:underline"
-                    >
-                      Acessar reunião
-                    </a>
-                  </p>
-                )}
-                {selectedTask.contact_number && (
-                  <p>
-                    <span className="font-medium">Contato:</span>{' '}
-                    {selectedTask.contact_number}
-                  </p>
-                )}
-              </div>
-
-              <div className="flex gap-2 pt-4">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={handleToggleComplete}
-                >
-                  <Checkbox
-                    checked={selectedTask.status === 'completed'}
-                    className="mr-2"
-                  />
-                  {selectedTask.status === 'completed' ? 'Reabrir' : 'Concluir'}
-                </Button>
-                <Button variant="outline" size="icon" onClick={handleEditTask}>
-                  <Edit className="w-4 h-4" />
-                </Button>
-                <Button variant="destructive" size="icon" onClick={handleDeleteTask}>
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Task Form Sheet */}
-      <Sheet open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <SheetContent>
-          <SheetHeader>
-            <SheetTitle className="font-display">
-              {editingTask ? 'Editar Tarefa' : 'Nova Tarefa'}
-            </SheetTitle>
-          </SheetHeader>
-          <form onSubmit={handleSubmit} className="space-y-6 mt-6">
-            <div className="space-y-2">
-              <Label>Data</Label>
-              <Input
-                value={selectedDate ? format(selectedDate, 'dd/MM/yyyy') : ''}
-                disabled
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Tipo</Label>
-              <Select
-                value={formData.task_type}
-                onValueChange={(value) =>
-                  setFormData({ ...formData, task_type: value })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="meeting">Reunião</SelectItem>
-                  <SelectItem value="content">Criação de Conteúdo</SelectItem>
-                  <SelectItem value="prospecting">Prospecção</SelectItem>
-                  <SelectItem value="steps">Tarefa por Etapas</SelectItem>
-                  <SelectItem value="other">Outra</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Título *</Label>
-              <Input
-                value={formData.title}
-                onChange={(e) =>
-                  setFormData({ ...formData, title: e.target.value })
-                }
-                placeholder="Título da tarefa"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Horário</Label>
-              <Input
-                type="time"
-                value={formData.scheduled_time}
-                onChange={(e) =>
-                  setFormData({ ...formData, scheduled_time: e.target.value })
-                }
-              />
-            </div>
-
-            {formData.task_type === 'meeting' && (
-              <>
-                <div className="space-y-2">
-                  <Label>Link da Reunião</Label>
-                  <Input
-                    value={formData.meeting_link}
-                    onChange={(e) =>
-                      setFormData({ ...formData, meeting_link: e.target.value })
-                    }
-                    placeholder="https://..."
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Número de Contato</Label>
-                  <Input
-                    value={formData.contact_number}
-                    onChange={(e) =>
-                      setFormData({ ...formData, contact_number: e.target.value })
-                    }
-                    placeholder="(00) 00000-0000"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Canal de Origem</Label>
-                  <Select
-                    value={formData.lead_source}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, lead_source: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="instagram">Instagram</SelectItem>
-                      <SelectItem value="cold_call">Cold Call</SelectItem>
-                      <SelectItem value="indication">Indicação</SelectItem>
-                      <SelectItem value="website">Site</SelectItem>
-                      <SelectItem value="other">Outro</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </>
-            )}
-
-            <div className="space-y-2">
-              <Label>Descrição</Label>
-              <Textarea
-                value={formData.description}
-                onChange={(e) =>
-                  setFormData({ ...formData, description: e.target.value })
-                }
-                placeholder="Detalhes da tarefa..."
-                rows={3}
-              />
-            </div>
-
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Salvando...' : editingTask ? 'Atualizar' : 'Criar Tarefa'}
-            </Button>
-          </form>
-        </SheetContent>
-      </Sheet>
+      {/* Day Tasks Dialog */}
+      {selectedDate && (
+        <DayTasksDialog
+          open={isDayDialogOpen}
+          onOpenChange={setIsDayDialogOpen}
+          selectedDate={selectedDate}
+          tasks={selectedDayTasks}
+          onTasksChange={fetchTasks}
+        />
+      )}
     </div>
   );
 }
