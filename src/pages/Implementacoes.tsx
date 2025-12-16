@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -42,6 +43,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import MetricCard from '@/components/dashboard/MetricCard';
+import LoadingScreen from '@/components/ui/loading-screen';
 import {
   Plus,
   Package,
@@ -60,11 +62,18 @@ import {
   Filter,
   TrendingUp,
   AlertCircle,
+  Upload,
+  XCircle,
+  Power,
+  ChevronLeft,
+  ChevronRight as ChevronRightIcon,
+  CalendarDays,
+  PackageCheck,
 } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, parseISO, isWithinInterval, addMonths, subMonths } from 'date-fns';
+import { format, startOfMonth, endOfMonth, parseISO, isWithinInterval, addMonths, subMonths, isBefore, isAfter, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { Power, ChevronLeft, ChevronRight as ChevronRightIcon, CalendarDays } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface Implementation {
   id: string;
@@ -74,7 +83,11 @@ interface Implementation {
   automation_type: string;
   implementation_value: number;
   recurrence_value: number | null;
+  recurrence_start_date: string | null;
+  recurrence_end_date: string | null;
   status: string;
+  delivery_completed: boolean;
+  delivery_completed_at: string | null;
   created_at: string;
 }
 
@@ -131,12 +144,14 @@ const automationTypes = [
 export default function Implementacoes() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [implementations, setImplementations] = useState<Implementation[]>([]);
   const [stages, setStages] = useState<Record<string, Stage[]>>({});
   const [feedbacks, setFeedbacks] = useState<Record<string, Feedback[]>>({});
   const [attachments, setAttachments] = useState<Record<string, Attachment[]>>({});
   const [billings, setBillings] = useState<Record<string, Billing[]>>({});
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [selectedImpl, setSelectedImpl] = useState<Implementation | null>(null);
@@ -145,6 +160,8 @@ export default function Implementacoes() {
   const [newFeedback, setNewFeedback] = useState('');
   const [newStageName, setNewStageName] = useState('');
   const [activeTab, setActiveTab] = useState('stages');
+  const [cancelRecurrenceOpen, setCancelRecurrenceOpen] = useState(false);
+  const [cancelDate, setCancelDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -152,6 +169,8 @@ export default function Implementacoes() {
   const [metricsMonth, setMetricsMonth] = useState(new Date());
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
+  const [showOnlyInactive, setShowOnlyInactive] = useState(false);
+  const [showOnlyDeliveryPending, setShowOnlyDeliveryPending] = useState(false);
 
   // Billing form
   const [newBilling, setNewBilling] = useState({
@@ -167,6 +186,7 @@ export default function Implementacoes() {
     automation_type: '',
     implementation_value: '',
     recurrence_value: '',
+    recurrence_start_date: '',
     status: 'active',
   });
 
@@ -253,6 +273,7 @@ export default function Implementacoes() {
       automation_type: formData.automation_type,
       implementation_value: parseFloat(formData.implementation_value) || 0,
       recurrence_value: formData.recurrence_value ? parseFloat(formData.recurrence_value) : null,
+      recurrence_start_date: formData.recurrence_start_date || null,
       status: formData.status,
     };
 
@@ -303,6 +324,7 @@ export default function Implementacoes() {
       automation_type: '',
       implementation_value: '',
       recurrence_value: '',
+      recurrence_start_date: '',
       status: 'active',
     });
   };
@@ -316,6 +338,7 @@ export default function Implementacoes() {
       automation_type: impl.automation_type,
       implementation_value: impl.implementation_value.toString(),
       recurrence_value: impl.recurrence_value?.toString() || '',
+      recurrence_start_date: impl.recurrence_start_date || '',
       status: impl.status,
     });
     setIsEditMode(true);
@@ -348,6 +371,41 @@ export default function Implementacoes() {
       toast({ title: 'Erro ao atualizar status', variant: 'destructive' });
     } else {
       toast({ title: `Implementação ${newStatus === 'active' ? 'ativada' : 'desativada'}` });
+      fetchData();
+    }
+  };
+
+  const handleToggleDeliveryCompleted = async (impl: Implementation, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const { error } = await supabase
+      .from('implementations')
+      .update({ 
+        delivery_completed: !impl.delivery_completed,
+        delivery_completed_at: !impl.delivery_completed ? new Date().toISOString() : null,
+      })
+      .eq('id', impl.id);
+
+    if (error) {
+      toast({ title: 'Erro ao atualizar entrega', variant: 'destructive' });
+    } else {
+      toast({ title: impl.delivery_completed ? 'Entrega marcada como pendente' : 'Entrega concluída' });
+      fetchData();
+    }
+  };
+
+  const handleCancelRecurrence = async () => {
+    if (!selectedImpl) return;
+
+    const { error } = await supabase
+      .from('implementations')
+      .update({ recurrence_end_date: cancelDate })
+      .eq('id', selectedImpl.id);
+
+    if (error) {
+      toast({ title: 'Erro ao cancelar recorrência', variant: 'destructive' });
+    } else {
+      toast({ title: 'Recorrência cancelada' });
+      setCancelRecurrenceOpen(false);
       fetchData();
     }
   };
@@ -465,10 +523,84 @@ export default function Implementacoes() {
     }
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!selectedImpl || !user || !e.target.files || e.target.files.length === 0) return;
+
+    const file = e.target.files[0];
+    setUploading(true);
+
+    try {
+      const fileExt = file.name.split('.').pop();
+      const filePath = `${user.id}/${selectedImpl.id}/${Date.now()}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('implementation-documents')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('implementation-documents')
+        .getPublicUrl(filePath);
+
+      const { error: dbError } = await supabase.from('implementation_attachments').insert({
+        implementation_id: selectedImpl.id,
+        file_name: file.name,
+        file_url: publicUrl,
+        file_type: file.type,
+      });
+
+      if (dbError) throw dbError;
+
+      toast({ title: 'Documento anexado' });
+      fetchData();
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast({ title: 'Erro ao fazer upload', variant: 'destructive' });
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDeleteAttachment = async (attachment: Attachment) => {
+    const { error } = await supabase.from('implementation_attachments').delete().eq('id', attachment.id);
+    if (error) {
+      toast({ title: 'Erro ao excluir anexo', variant: 'destructive' });
+    } else {
+      toast({ title: 'Anexo removido' });
+      fetchData();
+    }
+  };
+
   const openDetail = (impl: Implementation) => {
     setSelectedImpl(impl);
     setIsDetailOpen(true);
     setActiveTab('stages');
+  };
+
+  // Helper to check if recurrence is active for a given month
+  const isRecurrenceActiveForMonth = (impl: Implementation, monthDate: Date) => {
+    if (!impl.recurrence_value || impl.status !== 'active') return false;
+    
+    const monthStart = startOfMonth(monthDate);
+    const monthEnd = endOfMonth(monthDate);
+    
+    // If no start date, assume active from creation
+    const startDate = impl.recurrence_start_date 
+      ? startOfDay(parseISO(impl.recurrence_start_date))
+      : startOfDay(parseISO(impl.created_at));
+    
+    // If start date is after month end, not active
+    if (isAfter(startDate, monthEnd)) return false;
+    
+    // If there's an end date and it's before month start, not active
+    if (impl.recurrence_end_date) {
+      const endDate = startOfDay(parseISO(impl.recurrence_end_date));
+      if (isBefore(endDate, monthStart)) return false;
+    }
+    
+    return true;
   };
 
   // Filter implementations
@@ -480,6 +612,10 @@ export default function Implementacoes() {
       (impl.instagram?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false);
 
     if (!matchesSearch) return false;
+
+    // Status filter
+    if (showOnlyInactive && impl.status === 'active') return false;
+    if (showOnlyDeliveryPending && (impl.delivery_completed || impl.status !== 'active')) return false;
 
     // Date filter
     if (dateFilter === 'month') {
@@ -500,16 +636,17 @@ export default function Implementacoes() {
     return true;
   });
 
-  // Calculate metrics
-  const activeCount = filteredImplementations.filter(i => i.status === 'active').length;
-  const totalValue = filteredImplementations.reduce((acc, i) => acc + (i.implementation_value || 0), 0);
-  
-  // Recurrence metrics based on selected month
+  // Calculate metrics for selected month
   const metricsMonthStart = startOfMonth(metricsMonth);
   const metricsMonthEnd = endOfMonth(metricsMonth);
   
-  const totalRecurrenceExpected = filteredImplementations
-    .filter(i => i.status === 'active' && i.recurrence_value)
+  const activeCount = filteredImplementations.filter(i => i.status === 'active').length;
+  const deliveryPendingCount = implementations.filter(i => i.status === 'active' && !i.delivery_completed).length;
+  const deliveryCompletedCount = implementations.filter(i => i.delivery_completed).length;
+  
+  // Calculate recurrence only for implementations that are active in the selected month
+  const totalRecurrenceExpected = implementations
+    .filter(impl => isRecurrenceActiveForMonth(impl, metricsMonth))
     .reduce((acc, i) => acc + (i.recurrence_value || 0), 0);
 
   const allBillings = Object.values(billings).flat();
@@ -521,12 +658,31 @@ export default function Implementacoes() {
   const receivedRecurrence = monthBillings.filter(b => b.is_paid).reduce((acc, b) => acc + b.amount, 0);
   const pendingRecurrence = totalRecurrenceExpected - receivedRecurrence;
 
+  // Chart data for last 6 months
+  const chartData = Array.from({ length: 6 }, (_, i) => {
+    const month = subMonths(new Date(), 5 - i);
+    const monthStart = startOfMonth(month);
+    const monthEnd = endOfMonth(month);
+    
+    const expected = implementations
+      .filter(impl => isRecurrenceActiveForMonth(impl, month))
+      .reduce((acc, i) => acc + (i.recurrence_value || 0), 0);
+    
+    const monthlyBillings = allBillings.filter(b => {
+      const billingDate = parseISO(b.billing_date);
+      return isWithinInterval(billingDate, { start: monthStart, end: monthEnd }) && b.is_paid;
+    });
+    const received = monthlyBillings.reduce((acc, b) => acc + b.amount, 0);
+    
+    return {
+      month: format(month, 'MMM', { locale: ptBR }),
+      expected,
+      received,
+    };
+  });
+
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="animate-pulse text-muted-foreground">Carregando...</div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   return (
@@ -545,80 +701,121 @@ export default function Implementacoes() {
         </Button>
       </div>
 
-      {/* Metrics */}
-      <div className="space-y-4">
-        {/* Month Selector for Metrics */}
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CalendarDays className="w-5 h-5 text-primary" />
-                <span className="font-medium">Métricas de Recorrência</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setMetricsMonth(subMonths(metricsMonth, 1))}
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-                <span className="min-w-[140px] text-center font-medium capitalize">
-                  {format(metricsMonth, 'MMMM yyyy', { locale: ptBR })}
-                </span>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setMetricsMonth(addMonths(metricsMonth, 1))}
-                >
-                  <ChevronRightIcon className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setMetricsMonth(new Date())}
-                  className="ml-2"
-                >
-                  Hoje
-                </Button>
-              </div>
+      {/* Month Selector for Metrics */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-2">
+              <CalendarDays className="w-5 h-5 text-primary" />
+              <span className="font-medium">Métricas de Recorrência</span>
             </div>
-          </CardContent>
-        </Card>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setMetricsMonth(subMonths(metricsMonth, 1))}
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <span className="min-w-[140px] text-center font-medium capitalize">
+                {format(metricsMonth, 'MMMM yyyy', { locale: ptBR })}
+              </span>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setMetricsMonth(addMonths(metricsMonth, 1))}
+              >
+                <ChevronRightIcon className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setMetricsMonth(new Date())}
+                className="ml-2"
+              >
+                Hoje
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
-          <MetricCard
-            title="Total"
-            value={filteredImplementations.length}
-            icon={<Package className="w-5 h-5" />}
-          />
-          <MetricCard
-            title="Ativas"
-            value={activeCount}
-            icon={<CheckCircle2 className="w-5 h-5" />}
-          />
-          <MetricCard
-            title="Valor Total"
-            value={`R$ ${totalValue.toLocaleString('pt-BR')}`}
-            icon={<DollarSign className="w-5 h-5" />}
-          />
-          <MetricCard
-            title="Recorrência Esperada"
-            value={`R$ ${totalRecurrenceExpected.toLocaleString('pt-BR')}`}
-            icon={<TrendingUp className="w-5 h-5" />}
-          />
-          <MetricCard
-            title={`Recebido em ${format(metricsMonth, 'MMM', { locale: ptBR })}`}
-            value={`R$ ${receivedRecurrence.toLocaleString('pt-BR')}`}
-            icon={<CheckCircle2 className="w-5 h-5" />}
-          />
-          <MetricCard
-            title={`Pendente em ${format(metricsMonth, 'MMM', { locale: ptBR })}`}
-            value={`R$ ${Math.max(0, pendingRecurrence).toLocaleString('pt-BR')}`}
-            icon={<AlertCircle className="w-5 h-5" />}
-          />
-        </div>
+      {/* Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+        <MetricCard
+          title="Total"
+          value={implementations.length}
+          icon={<Package className="w-5 h-5" />}
+        />
+        <MetricCard
+          title="Ativas"
+          value={activeCount}
+          icon={<CheckCircle2 className="w-5 h-5" />}
+        />
+        <MetricCard
+          title="Entregas Pendentes"
+          value={deliveryPendingCount}
+          icon={<AlertCircle className="w-5 h-5" />}
+        />
+        <MetricCard
+          title="Entregas Concluídas"
+          value={deliveryCompletedCount}
+          icon={<PackageCheck className="w-5 h-5" />}
+        />
+        <MetricCard
+          title={`Esperado ${format(metricsMonth, 'MMM', { locale: ptBR })}`}
+          value={`R$ ${totalRecurrenceExpected.toLocaleString('pt-BR')}`}
+          icon={<TrendingUp className="w-5 h-5" />}
+        />
+        <MetricCard
+          title={`Recebido ${format(metricsMonth, 'MMM', { locale: ptBR })}`}
+          value={`R$ ${receivedRecurrence.toLocaleString('pt-BR')}`}
+          icon={<DollarSign className="w-5 h-5" />}
+        />
       </div>
+
+      {/* Recurrence Chart */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg font-display">Evolução da Recorrência</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                <XAxis dataKey="month" className="text-xs" />
+                <YAxis className="text-xs" tickFormatter={(v) => `R$${v}`} />
+                <Tooltip 
+                  formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']}
+                  contentStyle={{ 
+                    backgroundColor: 'hsl(var(--card))', 
+                    borderColor: 'hsl(var(--border))',
+                    borderRadius: '0.5rem',
+                  }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="expected" 
+                  stroke="hsl(var(--muted-foreground))" 
+                  strokeWidth={2}
+                  strokeDasharray="5 5"
+                  name="Esperado"
+                  dot={{ fill: 'hsl(var(--muted-foreground))' }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="received" 
+                  stroke="hsl(var(--primary))" 
+                  strokeWidth={2}
+                  name="Recebido"
+                  dot={{ fill: 'hsl(var(--primary))' }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Filters */}
       <Card>
@@ -633,7 +830,29 @@ export default function Implementacoes() {
                 className="pl-10"
               />
             </div>
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex gap-2 flex-wrap items-center">
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="inactive-filter"
+                  checked={showOnlyInactive}
+                  onCheckedChange={(checked) => {
+                    setShowOnlyInactive(checked);
+                    if (checked) setShowOnlyDeliveryPending(false);
+                  }}
+                />
+                <Label htmlFor="inactive-filter" className="text-sm">Inativos</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="pending-filter"
+                  checked={showOnlyDeliveryPending}
+                  onCheckedChange={(checked) => {
+                    setShowOnlyDeliveryPending(checked);
+                    if (checked) setShowOnlyInactive(false);
+                  }}
+                />
+                <Label htmlFor="pending-filter" className="text-sm">Entregas pendentes</Label>
+              </div>
               <Select value={dateFilter} onValueChange={(v: 'all' | 'month' | 'custom') => setDateFilter(v)}>
                 <SelectTrigger className="w-[160px]">
                   <Filter className="w-4 h-4 mr-2" />
@@ -686,15 +905,33 @@ export default function Implementacoes() {
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="space-y-1">
-                    <Badge variant={impl.status === 'active' ? 'default' : 'secondary'}>
-                      {impl.status === 'active' ? 'Ativo' : 'Inativo'}
-                    </Badge>
+                    <div className="flex gap-1 flex-wrap">
+                      <Badge variant={impl.status === 'active' ? 'default' : 'secondary'}>
+                        {impl.status === 'active' ? 'Ativo' : 'Inativo'}
+                      </Badge>
+                      {impl.delivery_completed && (
+                        <Badge variant="outline" className="text-success border-success">
+                          Entrega concluída
+                        </Badge>
+                      )}
+                    </div>
                     <CardTitle className="text-lg font-display flex items-center gap-2">
                       <Phone className="w-4 h-4 text-muted-foreground" />
                       {impl.client_phone}
                     </CardTitle>
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      title={impl.delivery_completed ? 'Marcar entrega pendente' : 'Marcar entrega concluída'}
+                      onClick={(e) => handleToggleDeliveryCompleted(impl, e)}
+                    >
+                      <PackageCheck className={cn(
+                        "w-4 h-4",
+                        impl.delivery_completed ? 'text-success' : 'text-muted-foreground'
+                      )} />
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -763,7 +1000,12 @@ export default function Implementacoes() {
                   </div>
                   {impl.recurrence_value && (
                     <div className="text-right">
-                      <p className="text-xs text-muted-foreground">Recorrência</p>
+                      <p className="text-xs text-muted-foreground">
+                        Recorrência
+                        {impl.recurrence_end_date && (
+                          <span className="text-destructive ml-1">(cancelada)</span>
+                        )}
+                      </p>
                       <p className="font-medium">R$ {impl.recurrence_value.toLocaleString('pt-BR')}/mês</p>
                     </div>
                   )}
@@ -879,6 +1121,19 @@ export default function Implementacoes() {
                 placeholder="0.00"
               />
             </div>
+            {formData.recurrence_value && (
+              <div className="space-y-2">
+                <Label>Início da Cobrança de Recorrência</Label>
+                <Input
+                  type="date"
+                  value={formData.recurrence_start_date}
+                  onChange={(e) => setFormData({ ...formData, recurrence_start_date: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  A recorrência só será contada a partir desta data
+                </p>
+              </div>
+            )}
             <Button onClick={handleCreateOrUpdate} className="w-full">
               {isEditMode ? 'Salvar Alterações' : 'Criar Implementação'}
             </Button>
@@ -897,16 +1152,37 @@ export default function Implementacoes() {
                     <Phone className="w-5 h-5" />
                     {selectedImpl.client_phone}
                   </DialogTitle>
-                  <Button variant="outline" size="sm" onClick={() => handleEdit(selectedImpl)}>
-                    <Edit className="w-4 h-4 mr-2" />
-                    Editar
-                  </Button>
+                  <div className="flex gap-2">
+                    {selectedImpl.recurrence_value && !selectedImpl.recurrence_end_date && (
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="text-destructive"
+                        onClick={() => {
+                          setCancelDate(format(new Date(), 'yyyy-MM-dd'));
+                          setCancelRecurrenceOpen(true);
+                        }}
+                      >
+                        <XCircle className="w-4 h-4 mr-2" />
+                        Cancelar Recorrência
+                      </Button>
+                    )}
+                    <Button variant="outline" size="sm" onClick={() => handleEdit(selectedImpl)}>
+                      <Edit className="w-4 h-4 mr-2" />
+                      Editar
+                    </Button>
+                  </div>
                 </div>
                 <DialogDescription className="flex items-center gap-4 flex-wrap">
                   <Badge>{selectedImpl.automation_type}</Badge>
                   <Badge variant={selectedImpl.status === 'active' ? 'default' : 'secondary'}>
                     {selectedImpl.status === 'active' ? 'Ativo' : 'Inativo'}
                   </Badge>
+                  {selectedImpl.delivery_completed && (
+                    <Badge variant="outline" className="text-success border-success">
+                      Entrega concluída
+                    </Badge>
+                  )}
                   {selectedImpl.instagram && (
                     <span className="flex items-center gap-1">
                       <Instagram className="w-4 h-4" />
@@ -991,6 +1267,11 @@ export default function Implementacoes() {
                 </TabsContent>
 
                 <TabsContent value="billing" className="space-y-4">
+                  {selectedImpl.recurrence_end_date && (
+                    <div className="p-3 bg-destructive/10 rounded-lg text-sm text-destructive">
+                      Recorrência cancelada em {format(parseISO(selectedImpl.recurrence_end_date), 'dd/MM/yyyy', { locale: ptBR })}
+                    </div>
+                  )}
                   <div className="space-y-2 max-h-64 overflow-y-auto">
                     {(billings[selectedImpl.id] || []).map((billing) => (
                       <div 
@@ -1097,24 +1378,57 @@ export default function Implementacoes() {
                 <TabsContent value="attachments" className="space-y-4">
                   <div className="space-y-2">
                     {(attachments[selectedImpl.id] || []).map((att) => (
-                      <a 
+                      <div 
                         key={att.id}
-                        href={att.file_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 p-2 rounded-lg border hover:bg-muted/50 transition-colors"
+                        className="flex items-center gap-2 p-2 rounded-lg border hover:bg-muted/50 transition-colors group"
                       >
                         <FileText className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm">{att.file_name}</span>
-                      </a>
+                        <a 
+                          href={att.file_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex-1 text-sm hover:underline"
+                        >
+                          {att.file_name}
+                        </a>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="opacity-0 group-hover:opacity-100"
+                          onClick={() => handleDeleteAttachment(att)}
+                        >
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      </div>
                     ))}
                     {(attachments[selectedImpl.id] || []).length === 0 && (
                       <p className="text-sm text-muted-foreground text-center py-4">Nenhum anexo</p>
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Funcionalidade de upload em breve
-                  </p>
+                  <div className="relative">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                      accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg"
+                    />
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                    >
+                      {uploading ? (
+                        <>Enviando...</>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4 mr-2" />
+                          Anexar Documento
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </TabsContent>
               </Tabs>
 
@@ -1128,7 +1442,14 @@ export default function Implementacoes() {
                 </div>
                 {selectedImpl.recurrence_value && (
                   <div className="text-right">
-                    <p className="text-sm text-muted-foreground">Recorrência Mensal</p>
+                    <p className="text-sm text-muted-foreground">
+                      Recorrência Mensal
+                      {selectedImpl.recurrence_start_date && (
+                        <span className="block text-xs">
+                          A partir de {format(parseISO(selectedImpl.recurrence_start_date), 'dd/MM/yyyy')}
+                        </span>
+                      )}
+                    </p>
                     <p className="text-xl font-display">
                       R$ {selectedImpl.recurrence_value.toLocaleString('pt-BR')}
                     </p>
@@ -1137,6 +1458,36 @@ export default function Implementacoes() {
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel Recurrence Dialog */}
+      <Dialog open={cancelRecurrenceOpen} onOpenChange={setCancelRecurrenceOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancelar Recorrência</DialogTitle>
+            <DialogDescription>
+              Escolha a data de cancelamento. A recorrência não será mais contada a partir desta data.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Data de Cancelamento</Label>
+              <Input
+                type="date"
+                value={cancelDate}
+                onChange={(e) => setCancelDate(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCancelRecurrenceOpen(false)}>
+              Voltar
+            </Button>
+            <Button variant="destructive" onClick={handleCancelRecurrence}>
+              Cancelar Recorrência
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

@@ -287,10 +287,14 @@ export type Database = {
           automation_type: string
           client_phone: string
           created_at: string | null
+          delivery_completed: boolean
+          delivery_completed_at: string | null
           group_link: string | null
           id: string
           implementation_value: number
           instagram: string | null
+          recurrence_end_date: string | null
+          recurrence_start_date: string | null
           recurrence_value: number | null
           status: string
           updated_at: string | null
@@ -300,10 +304,14 @@ export type Database = {
           automation_type: string
           client_phone: string
           created_at?: string | null
+          delivery_completed?: boolean
+          delivery_completed_at?: string | null
           group_link?: string | null
           id?: string
           implementation_value?: number
           instagram?: string | null
+          recurrence_end_date?: string | null
+          recurrence_start_date?: string | null
           recurrence_value?: number | null
           status?: string
           updated_at?: string | null
@@ -313,10 +321,14 @@ export type Database = {
           automation_type?: string
           client_phone?: string
           created_at?: string | null
+          delivery_completed?: boolean
+          delivery_completed_at?: string | null
           group_link?: string | null
           id?: string
           implementation_value?: number
           instagram?: string | null
+          recurrence_end_date?: string | null
+          recurrence_start_date?: string | null
           recurrence_value?: number | null
           status?: string
           updated_at?: string | null

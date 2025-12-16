@@ -1,8 +1,16 @@
 import { motion } from 'framer-motion';
 
-export default function LoadingScreen() {
+interface LoadingScreenProps {
+  fullScreen?: boolean;
+}
+
+export default function LoadingScreen({ fullScreen = true }: LoadingScreenProps) {
+  const containerClass = fullScreen 
+    ? "fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-md"
+    : "absolute inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-sm rounded-lg";
+    
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-md">
+    <div className={containerClass}>
       <motion.div
         className="relative"
         initial={{ opacity: 0, scale: 0.8 }}
@@ -11,7 +19,7 @@ export default function LoadingScreen() {
       >
         {/* Outer ring */}
         <motion.div
-          className="h-16 w-16 rounded-full border-4 border-primary/20"
+          className="h-12 w-12 rounded-full border-4 border-primary/20"
           style={{ borderTopColor: 'hsl(var(--primary))' }}
           animate={{ rotate: 360 }}
           transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
@@ -27,7 +35,7 @@ export default function LoadingScreen() {
         
         {/* Center dot */}
         <motion.div
-          className="absolute inset-0 m-auto h-3 w-3 rounded-full bg-primary"
+          className="absolute inset-0 m-auto h-2 w-2 rounded-full bg-primary"
           animate={{ scale: [1, 1.2, 1] }}
           transition={{ duration: 1, repeat: Infinity }}
         />
