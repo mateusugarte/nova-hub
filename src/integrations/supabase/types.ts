@@ -32,6 +32,45 @@ export type Database = {
         }
         Relationships: []
       }
+      content_ideas: {
+        Row: {
+          content_type: string
+          created_at: string | null
+          description: string | null
+          id: string
+          is_posted: boolean | null
+          posted_at: string | null
+          reference_link: string | null
+          title: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          content_type?: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_posted?: boolean | null
+          posted_at?: string | null
+          reference_link?: string | null
+          title: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          content_type?: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_posted?: boolean | null
+          posted_at?: string | null
+          reference_link?: string | null
+          title?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       documents: {
         Row: {
           content: string | null
@@ -55,6 +94,50 @@ export type Database = {
           metadata?: Json | null
         }
         Relationships: []
+      }
+      follow_ups: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          follow_up_date: string | null
+          id: string
+          is_completed: boolean | null
+          notes: string | null
+          prospect_id: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string | null
+          follow_up_date?: string | null
+          id?: string
+          is_completed?: boolean | null
+          notes?: string | null
+          prospect_id: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string | null
+          follow_up_date?: string | null
+          id?: string
+          is_completed?: boolean | null
+          notes?: string | null
+          prospect_id?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "follow_ups_prospect_id_fkey"
+            columns: ["prospect_id"]
+            isOneToOne: false
+            referencedRelation: "prospects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       operacoes: {
         Row: {
@@ -149,6 +232,53 @@ export type Database = {
         }
         Relationships: []
       }
+      posted_content: {
+        Row: {
+          channel: string
+          content_idea_id: string | null
+          content_type: string
+          created_at: string | null
+          id: string
+          post_link: string
+          posted_date: string
+          title: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          channel?: string
+          content_idea_id?: string | null
+          content_type?: string
+          created_at?: string | null
+          id?: string
+          post_link: string
+          posted_date: string
+          title: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          channel?: string
+          content_idea_id?: string | null
+          content_type?: string
+          created_at?: string | null
+          id?: string
+          post_link?: string
+          posted_date?: string
+          title?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "posted_content_content_idea_id_fkey"
+            columns: ["content_idea_id"]
+            isOneToOne: false
+            referencedRelation: "content_ideas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
@@ -173,6 +303,177 @@ export type Database = {
           key?: string | null
           nome?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      prospects: {
+        Row: {
+          approach_description: string | null
+          contact_summary: string | null
+          created_at: string | null
+          has_meeting_scheduled: boolean | null
+          id: string
+          instagram_link: string | null
+          meeting_date: string | null
+          needs_follow_up: boolean | null
+          objections: string | null
+          phone_number: string | null
+          profile_summary: string | null
+          prospecting_method: string[] | null
+          rejection_reason: string | null
+          status: string
+          updated_at: string | null
+          user_id: string
+          was_rejected: boolean | null
+        }
+        Insert: {
+          approach_description?: string | null
+          contact_summary?: string | null
+          created_at?: string | null
+          has_meeting_scheduled?: boolean | null
+          id?: string
+          instagram_link?: string | null
+          meeting_date?: string | null
+          needs_follow_up?: boolean | null
+          objections?: string | null
+          phone_number?: string | null
+          profile_summary?: string | null
+          prospecting_method?: string[] | null
+          rejection_reason?: string | null
+          status?: string
+          updated_at?: string | null
+          user_id: string
+          was_rejected?: boolean | null
+        }
+        Update: {
+          approach_description?: string | null
+          contact_summary?: string | null
+          created_at?: string | null
+          has_meeting_scheduled?: boolean | null
+          id?: string
+          instagram_link?: string | null
+          meeting_date?: string | null
+          needs_follow_up?: boolean | null
+          objections?: string | null
+          phone_number?: string | null
+          profile_summary?: string | null
+          prospecting_method?: string[] | null
+          rejection_reason?: string | null
+          status?: string
+          updated_at?: string | null
+          user_id?: string
+          was_rejected?: boolean | null
+        }
+        Relationships: []
+      }
+      task_templates: {
+        Row: {
+          color: string | null
+          created_at: string | null
+          default_duration: number | null
+          icon: string | null
+          id: string
+          name: string
+          task_type: string
+          user_id: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string | null
+          default_duration?: number | null
+          icon?: string | null
+          id?: string
+          name: string
+          task_type: string
+          user_id: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string | null
+          default_duration?: number | null
+          icon?: string | null
+          id?: string
+          name?: string
+          task_type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      tasks: {
+        Row: {
+          completed_at: string | null
+          contact_number: string | null
+          created_at: string | null
+          description: string | null
+          duration_minutes: number | null
+          id: string
+          lead_source: string | null
+          meeting_link: string | null
+          scheduled_date: string
+          scheduled_time: string | null
+          status: string
+          steps: Json | null
+          task_type: string
+          title: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          contact_number?: string | null
+          created_at?: string | null
+          description?: string | null
+          duration_minutes?: number | null
+          id?: string
+          lead_source?: string | null
+          meeting_link?: string | null
+          scheduled_date: string
+          scheduled_time?: string | null
+          status?: string
+          steps?: Json | null
+          task_type?: string
+          title: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          contact_number?: string | null
+          created_at?: string | null
+          description?: string | null
+          duration_minutes?: number | null
+          id?: string
+          lead_source?: string | null
+          meeting_link?: string | null
+          scheduled_date?: string
+          scheduled_time?: string | null
+          status?: string
+          steps?: Json | null
+          task_type?: string
+          title?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string | null
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
         }
         Relationships: []
       }
@@ -263,11 +564,51 @@ export type Database = {
         }
         Relationships: []
       }
+      weekly_planning: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          id: string
+          is_completed: boolean | null
+          updated_at: string | null
+          user_id: string
+          week_end: string
+          week_start: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string | null
+          id?: string
+          is_completed?: boolean | null
+          updated_at?: string | null
+          user_id: string
+          week_end: string
+          week_start: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string | null
+          id?: string
+          is_completed?: boolean | null
+          updated_at?: string | null
+          user_id?: string
+          week_end?: string
+          week_start?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
       hybrid_search: {
         Args: {
           full_text_weight?: number
@@ -293,6 +634,7 @@ export type Database = {
       }
     }
     Enums: {
+      app_role: "admin" | "user"
       tipo_seguro:
         | "auto"
         | "fianca"
@@ -427,6 +769,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      app_role: ["admin", "user"],
       tipo_seguro: [
         "auto",
         "fianca",
