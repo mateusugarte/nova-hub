@@ -139,6 +139,150 @@ export type Database = {
           },
         ]
       }
+      implementation_attachments: {
+        Row: {
+          created_at: string | null
+          file_name: string
+          file_type: string | null
+          file_url: string
+          id: string
+          implementation_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          file_name: string
+          file_type?: string | null
+          file_url: string
+          id?: string
+          implementation_id: string
+        }
+        Update: {
+          created_at?: string | null
+          file_name?: string
+          file_type?: string | null
+          file_url?: string
+          id?: string
+          implementation_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "implementation_attachments_implementation_id_fkey"
+            columns: ["implementation_id"]
+            isOneToOne: false
+            referencedRelation: "implementations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      implementation_feedbacks: {
+        Row: {
+          content: string
+          created_at: string | null
+          id: string
+          implementation_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string | null
+          id?: string
+          implementation_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          id?: string
+          implementation_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "implementation_feedbacks_implementation_id_fkey"
+            columns: ["implementation_id"]
+            isOneToOne: false
+            referencedRelation: "implementations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      implementation_stages: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          id: string
+          implementation_id: string
+          is_completed: boolean
+          name: string
+          order_index: number
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string | null
+          id?: string
+          implementation_id: string
+          is_completed?: boolean
+          name: string
+          order_index?: number
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string | null
+          id?: string
+          implementation_id?: string
+          is_completed?: boolean
+          name?: string
+          order_index?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "implementation_stages_implementation_id_fkey"
+            columns: ["implementation_id"]
+            isOneToOne: false
+            referencedRelation: "implementations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      implementations: {
+        Row: {
+          automation_type: string
+          client_phone: string
+          created_at: string | null
+          group_link: string | null
+          id: string
+          implementation_value: number
+          instagram: string | null
+          recurrence_value: number | null
+          status: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          automation_type: string
+          client_phone: string
+          created_at?: string | null
+          group_link?: string | null
+          id?: string
+          implementation_value?: number
+          instagram?: string | null
+          recurrence_value?: number | null
+          status?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          automation_type?: string
+          client_phone?: string
+          created_at?: string | null
+          group_link?: string | null
+          id?: string
+          implementation_value?: number
+          instagram?: string | null
+          recurrence_value?: number | null
+          status?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       operacoes: {
         Row: {
           banco: string
