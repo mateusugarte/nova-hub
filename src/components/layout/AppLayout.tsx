@@ -7,6 +7,7 @@ import {
   CheckSquare,
   FileText,
   Users,
+  Package,
   LogOut,
   Menu,
 } from 'lucide-react';
@@ -31,6 +32,7 @@ const navigation = [
   { name: 'Tarefas', href: '/tarefas', icon: CheckSquare },
   { name: 'Postagens', href: '/postagens', icon: FileText },
   { name: 'Prospecção', href: '/prospeccao', icon: Users },
+  { name: 'Implementações', href: '/implementacoes', icon: Package },
 ];
 
 function AppSidebar() {
