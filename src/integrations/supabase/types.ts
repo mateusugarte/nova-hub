@@ -174,6 +174,47 @@ export type Database = {
           },
         ]
       }
+      implementation_billings: {
+        Row: {
+          amount: number
+          billing_date: string
+          created_at: string | null
+          id: string
+          implementation_id: string
+          is_paid: boolean
+          notes: string | null
+          paid_at: string | null
+        }
+        Insert: {
+          amount: number
+          billing_date: string
+          created_at?: string | null
+          id?: string
+          implementation_id: string
+          is_paid?: boolean
+          notes?: string | null
+          paid_at?: string | null
+        }
+        Update: {
+          amount?: number
+          billing_date?: string
+          created_at?: string | null
+          id?: string
+          implementation_id?: string
+          is_paid?: boolean
+          notes?: string | null
+          paid_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "implementation_billings_implementation_id_fkey"
+            columns: ["implementation_id"]
+            isOneToOne: false
+            referencedRelation: "implementations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       implementation_feedbacks: {
         Row: {
           content: string

@@ -55,9 +55,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
   return (
     <InfiniteGrid>
       <div className="min-h-screen pb-24">
-        <div className="fixed top-4 right-4 z-40">
-          <ThemeToggle />
-        </div>
+        <header className="sticky top-0 z-40 w-full border-b border-border/40 bg-background/80 backdrop-blur-lg">
+          <div className="flex h-14 items-center justify-between px-6">
+            <h1 className="text-lg font-display text-primary">GetMore</h1>
+            <ThemeToggle />
+          </div>
+        </header>
         <main className="p-6 lg:p-8">
           {children}
         </main>
