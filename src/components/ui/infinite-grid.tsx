@@ -1,11 +1,5 @@
-import React, { useRef } from "react";
+import React from "react";
 import { cn } from "@/lib/utils";
-import { 
-  motion, 
-  useMotionValue, 
-  useMotionTemplate, 
-  useAnimationFrame 
-} from "framer-motion";
 
 interface InfiniteGridProps {
   children?: React.ReactNode;
@@ -13,58 +7,26 @@ interface InfiniteGridProps {
 }
 
 export const InfiniteGrid = ({ children, className }: InfiniteGridProps) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const mouseX = useMotionValue(0);
-  const mouseY = useMotionValue(0);
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    const { left, top } = e.currentTarget.getBoundingClientRect();
-    mouseX.set(e.clientX - left);
-    mouseY.set(e.clientY - top);
-  };
-
-  const gridOffsetX = useMotionValue(0);
-  const gridOffsetY = useMotionValue(0);
-
-  const speedX = 0.3; 
-  const speedY = 0.3;
-
-  useAnimationFrame(() => {
-    const currentX = gridOffsetX.get();
-    const currentY = gridOffsetY.get();
-    gridOffsetX.set((currentX + speedX) % 40);
-    gridOffsetY.set((currentY + speedY) % 40);
-  });
-
-  const maskImage = useMotionTemplate`radial-gradient(400px circle at ${mouseX}px ${mouseY}px, black, transparent)`;
-
   return (
     <div
-      ref={containerRef}
-      onMouseMove={handleMouseMove}
       className={cn(
         "relative w-full min-h-screen overflow-hidden bg-background",
         className
       )}
     >
-      {/* Static grid layer */}
-      <div className="absolute inset-0 z-0 opacity-[0.02] dark:opacity-[0.03]">
-        <GridPattern offsetX={gridOffsetX} offsetY={gridOffsetY} />
-      </div>
-      
-      {/* Mouse-following grid layer */}
-      <motion.div 
-        className="absolute inset-0 z-0 opacity-10 dark:opacity-20"
-        style={{ maskImage, WebkitMaskImage: maskImage }}
-      >
-        <GridPattern offsetX={gridOffsetX} offsetY={gridOffsetY} />
-      </motion.div>
+      {/* Static grid pattern - much lighter */}
+      <div 
+        className="absolute inset-0 z-0 opacity-[0.015] dark:opacity-[0.02]"
+        style={{
+          backgroundImage: `linear-gradient(hsl(var(--muted-foreground)) 1px, transparent 1px),
+                           linear-gradient(90deg, hsl(var(--muted-foreground)) 1px, transparent 1px)`,
+          backgroundSize: '40px 40px'
+        }}
+      />
 
-      {/* Gradient blobs */}
+      {/* Subtle gradient accent */}
       <div className="absolute inset-0 pointer-events-none z-0">
-        <div className="absolute right-[-15%] top-[-15%] w-[35%] h-[35%] rounded-full bg-primary/5 dark:bg-primary/10 blur-[120px]" />
-        <div className="absolute left-[-10%] bottom-[-15%] w-[30%] h-[30%] rounded-full bg-primary/3 dark:bg-primary/5 blur-[100px]" />
+        <div className="absolute right-0 top-0 w-1/3 h-1/3 rounded-full bg-primary/3 dark:bg-primary/5 blur-[150px]" />
       </div>
 
       {/* Content */}
@@ -72,32 +34,6 @@ export const InfiniteGrid = ({ children, className }: InfiniteGridProps) => {
         {children}
       </div>
     </div>
-  );
-};
-
-const GridPattern = ({ offsetX, offsetY }: { offsetX: any, offsetY: any }) => {
-  return (
-    <svg className="w-full h-full">
-      <defs>
-        <motion.pattern
-          id="grid-pattern-main"
-          width="40"
-          height="40"
-          patternUnits="userSpaceOnUse"
-          x={offsetX}
-          y={offsetY}
-        >
-          <path
-            d="M 40 0 L 0 0 0 40"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1"
-            className="text-muted-foreground" 
-          />
-        </motion.pattern>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#grid-pattern-main)" />
-    </svg>
   );
 };
 
