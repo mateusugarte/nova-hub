@@ -21,6 +21,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -42,6 +48,8 @@ import {
   Play,
   Trash2,
   Edit,
+  ListChecks,
+  CheckCircle2,
 } from 'lucide-react';
 import MetricCard from '@/components/dashboard/MetricCard';
 import PlanningWizard from '@/components/planning/PlanningWizard';
@@ -52,9 +60,17 @@ import {
   eachDayOfInterval,
   startOfMonth,
   endOfMonth,
+  isToday,
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { Json } from '@/integrations/supabase/types';
+
+interface TaskStep {
+  id: string;
+  title: string;
+  completed: boolean;
+}
 
 interface Task {
   id: string;
@@ -64,6 +80,7 @@ interface Task {
   status: string;
   scheduled_date: string;
   scheduled_time: string | null;
+  steps: TaskStep[] | null;
 }
 
 interface WeeklyPlanning {
@@ -74,11 +91,19 @@ interface WeeklyPlanning {
 }
 
 const taskTypeColors: Record<string, string> = {
-  meeting: 'bg-task-meeting',
-  content: 'bg-task-content',
-  prospecting: 'bg-task-prospecting',
-  steps: 'bg-task-steps',
-  other: 'bg-task-other',
+  meeting: 'bg-[hsl(342,75%,33%)]',
+  content: 'bg-[hsl(142,76%,36%)]',
+  prospecting: 'bg-[hsl(38,92%,50%)]',
+  steps: 'bg-[hsl(262,83%,58%)]',
+  other: 'bg-[hsl(0,0%,46%)]',
+};
+
+const taskTypeBadgeColors: Record<string, string> = {
+  meeting: 'bg-[hsl(342,75%,33%)] text-white',
+  content: 'bg-[hsl(142,76%,36%)] text-white',
+  prospecting: 'bg-[hsl(38,92%,50%)] text-white',
+  steps: 'bg-[hsl(262,83%,58%)] text-white',
+  other: 'bg-[hsl(0,0%,46%)] text-white',
 };
 
 const taskTypeLabels: Record<string, string> = {
@@ -99,12 +124,15 @@ export default function Tarefas() {
   const [isPlanningWizardOpen, setIsPlanningWizardOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
+  const [selectedTaskForSteps, setSelectedTaskForSteps] = useState<Task | null>(null);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     task_type: 'other',
     scheduled_time: '',
   });
+  const [taskSteps, setTaskSteps] = useState<TaskStep[]>([]);
+  const [newStepTitle, setNewStepTitle] = useState('');
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState({
     totalMonth: 0,
@@ -123,6 +151,18 @@ export default function Tarefas() {
     }
   }, [user]);
 
+  const parseSteps = (stepsJson: Json | null): TaskStep[] | null => {
+    if (!stepsJson) return null;
+    if (Array.isArray(stepsJson)) {
+      return stepsJson.map((step: any) => ({
+        id: step.id || crypto.randomUUID(),
+        title: step.title || '',
+        completed: step.completed || false,
+      }));
+    }
+    return null;
+  };
+
   const fetchData = async () => {
     if (!user) return;
 
@@ -131,7 +171,6 @@ export default function Tarefas() {
     const monthStartStr = format(startOfMonth(today), 'yyyy-MM-dd');
     const monthEndStr = format(endOfMonth(today), 'yyyy-MM-dd');
 
-    // Fetch weekly tasks
     const { data: tasksData } = await supabase
       .from('tasks')
       .select('*')
@@ -140,9 +179,13 @@ export default function Tarefas() {
       .lte('scheduled_date', weekEndStr)
       .order('scheduled_time', { ascending: true });
 
-    setTasks(tasksData || []);
+    const parsedTasks = (tasksData || []).map(task => ({
+      ...task,
+      steps: parseSteps(task.steps),
+    }));
 
-    // Fetch weekly planning
+    setTasks(parsedTasks);
+
     const { data: planningData } = await supabase
       .from('weekly_planning')
       .select('*')
@@ -152,7 +195,6 @@ export default function Tarefas() {
 
     setWeeklyPlanning(planningData);
 
-    // Fetch stats
     const { count: totalMonth } = await supabase
       .from('tasks')
       .select('*', { count: 'exact', head: true })
@@ -182,7 +224,7 @@ export default function Tarefas() {
     setStats({
       totalMonth: totalMonth || 0,
       completedMonth: completedMonth || 0,
-      nextTask: nextTaskData,
+      nextTask: nextTaskData ? { ...nextTaskData, steps: parseSteps(nextTaskData.steps) } : null,
     });
   };
 
@@ -230,6 +272,7 @@ export default function Tarefas() {
       task_type: 'other',
       scheduled_time: '',
     });
+    setTaskSteps([]);
     setIsFormOpen(true);
   };
 
@@ -242,7 +285,27 @@ export default function Tarefas() {
       task_type: task.task_type,
       scheduled_time: task.scheduled_time || '',
     });
+    setTaskSteps(task.steps || []);
     setIsFormOpen(true);
+  };
+
+  const handleAddStep = () => {
+    if (!newStepTitle.trim()) return;
+    setTaskSteps([
+      ...taskSteps,
+      { id: crypto.randomUUID(), title: newStepTitle, completed: false }
+    ]);
+    setNewStepTitle('');
+  };
+
+  const handleRemoveStep = (stepId: string) => {
+    setTaskSteps(taskSteps.filter(s => s.id !== stepId));
+  };
+
+  const handleToggleStepInForm = (stepId: string) => {
+    setTaskSteps(taskSteps.map(s => 
+      s.id === stepId ? { ...s, completed: !s.completed } : s
+    ));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -252,6 +315,10 @@ export default function Tarefas() {
     setLoading(true);
 
     const selectedDate = weekDays[selectedDay];
+    const stepsData = formData.task_type === 'steps' && taskSteps.length > 0 
+      ? JSON.parse(JSON.stringify(taskSteps))
+      : null;
+
     const taskData = {
       user_id: user.id,
       title: formData.title,
@@ -259,6 +326,7 @@ export default function Tarefas() {
       task_type: formData.task_type,
       scheduled_date: format(selectedDate, 'yyyy-MM-dd'),
       scheduled_time: formData.scheduled_time || null,
+      steps: stepsData,
     };
 
     let error;
@@ -281,6 +349,7 @@ export default function Tarefas() {
       toast({ title: `Tarefa ${editingTask ? 'atualizada' : 'criada'} com sucesso` });
       setIsFormOpen(false);
       setEditingTask(null);
+      setTaskSteps([]);
       fetchData();
     }
   };
@@ -297,6 +366,31 @@ export default function Tarefas() {
 
     if (error) {
       toast({ title: 'Erro ao atualizar tarefa', variant: 'destructive' });
+    } else {
+      fetchData();
+    }
+  };
+
+  const handleToggleTaskStep = async (task: Task, stepId: string) => {
+    if (!task.steps) return;
+
+    const updatedSteps = task.steps.map(s =>
+      s.id === stepId ? { ...s, completed: !s.completed } : s
+    );
+
+    const allCompleted = updatedSteps.every(s => s.completed);
+
+    const { error } = await supabase
+      .from('tasks')
+      .update({
+        steps: JSON.parse(JSON.stringify(updatedSteps)),
+        status: allCompleted ? 'completed' : 'pending',
+        completed_at: allCompleted ? new Date().toISOString() : null,
+      })
+      .eq('id', task.id);
+
+    if (error) {
+      toast({ title: 'Erro ao atualizar etapa', variant: 'destructive' });
     } else {
       fetchData();
     }
@@ -319,6 +413,14 @@ export default function Tarefas() {
   const successRate = stats.totalMonth > 0
     ? Math.round((stats.completedMonth / stats.totalMonth) * 100)
     : 0;
+
+  const getCompletedStepsCount = (task: Task) => {
+    if (!task.steps) return { completed: 0, total: 0 };
+    return {
+      completed: task.steps.filter(s => s.completed).length,
+      total: task.steps.length,
+    };
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -390,13 +492,18 @@ export default function Tarefas() {
             <TabsTrigger
               key={index}
               value={index.toString()}
-              className="flex-1 min-w-[100px]"
+              className={cn(
+                "flex-1 min-w-[100px]",
+                isToday(day) && "ring-2 ring-primary ring-offset-2 ring-offset-background"
+              )}
             >
               <div className="text-center">
                 <div className="text-xs text-muted-foreground">
                   {format(day, 'EEE', { locale: ptBR })}
                 </div>
-                <div className="font-medium">{format(day, 'dd')}</div>
+                <div className={cn("font-medium", isToday(day) && "text-primary")}>
+                  {format(day, 'dd')}
+                </div>
               </div>
             </TabsTrigger>
           ))}
@@ -409,8 +516,12 @@ export default function Tarefas() {
               <Card>
                 <CardHeader className="pb-4">
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg font-display capitalize">
+                    <CardTitle className={cn(
+                      "text-lg font-display capitalize",
+                      isToday(day) && "text-primary"
+                    )}>
                       {format(day, "EEEE, dd 'de' MMMM", { locale: ptBR })}
+                      {isToday(day) && <Badge className="ml-2">Hoje</Badge>}
                     </CardTitle>
                     <Button size="sm" onClick={() => handleAddTask(index)}>
                       <Plus className="w-4 h-4 mr-2" />
@@ -425,62 +536,82 @@ export default function Tarefas() {
                     </p>
                   ) : (
                     <div className="space-y-3">
-                      {dayTasks.map((task) => (
-                        <div
-                          key={task.id}
-                          className={cn(
-                            "flex items-center gap-4 p-4 rounded-lg border transition-all",
-                            task.status === 'completed'
-                              ? "bg-muted/50 opacity-60"
-                              : "bg-card hover:shadow-sm"
-                          )}
-                        >
-                          <Checkbox
-                            checked={task.status === 'completed'}
-                            onCheckedChange={() => handleToggleTask(task)}
-                          />
+                      {dayTasks.map((task) => {
+                        const stepsCount = getCompletedStepsCount(task);
+                        return (
                           <div
+                            key={task.id}
                             className={cn(
-                              "w-3 h-3 rounded-full",
-                              taskTypeColors[task.task_type]
+                              "flex items-start gap-4 p-4 rounded-lg border transition-all",
+                              task.status === 'completed'
+                                ? "bg-muted/50 opacity-60"
+                                : "bg-card hover:shadow-sm"
                             )}
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p
+                          >
+                            {task.task_type !== 'steps' ? (
+                              <Checkbox
+                                checked={task.status === 'completed'}
+                                onCheckedChange={() => handleToggleTask(task)}
+                                className="mt-1"
+                              />
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="shrink-0 mt-0"
+                                onClick={() => setSelectedTaskForSteps(task)}
+                              >
+                                <ListChecks className="w-5 h-5 text-primary" />
+                              </Button>
+                            )}
+                            <div
                               className={cn(
-                                "font-medium",
-                                task.status === 'completed' && "line-through"
+                                "w-3 h-3 rounded-full mt-1.5 shrink-0",
+                                taskTypeColors[task.task_type]
                               )}
-                            >
-                              {task.title}
-                            </p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <Badge variant="outline" className="text-xs">
-                                {taskTypeLabels[task.task_type]}
-                              </Badge>
-                              {task.scheduled_time && (
-                                <span className="text-xs text-muted-foreground">
-                                  {task.scheduled_time.slice(0, 5)}
-                                </span>
-                              )}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p
+                                className={cn(
+                                  "font-medium",
+                                  task.status === 'completed' && "line-through"
+                                )}
+                              >
+                                {task.title}
+                              </p>
+                              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                <Badge className={taskTypeBadgeColors[task.task_type]}>
+                                  {taskTypeLabels[task.task_type]}
+                                </Badge>
+                                {task.scheduled_time && (
+                                  <span className="text-xs text-muted-foreground">
+                                    {task.scheduled_time.slice(0, 5)}
+                                  </span>
+                                )}
+                                {task.task_type === 'steps' && task.steps && (
+                                  <span className="text-xs text-muted-foreground">
+                                    {stepsCount.completed}/{stepsCount.total} etapas
+                                  </span>
+                                )}
+                              </div>
                             </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEditTask(task, index)}
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setDeleteTaskId(task.id)}
+                            >
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleEditTask(task, index)}
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setDeleteTaskId(task.id)}
-                          >
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          </Button>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </CardContent>
@@ -504,7 +635,7 @@ export default function Tarefas() {
 
       {/* Task Form Sheet */}
       <Sheet open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <SheetContent>
+        <SheetContent className="overflow-y-auto">
           <SheetHeader>
             <SheetTitle className="font-display">
               {editingTask ? 'Editar Tarefa' : 'Nova Tarefa'}
@@ -531,11 +662,36 @@ export default function Tarefas() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="meeting">Reunião</SelectItem>
-                  <SelectItem value="content">Criação de Conteúdo</SelectItem>
-                  <SelectItem value="prospecting">Prospecção</SelectItem>
-                  <SelectItem value="steps">Tarefa por Etapas</SelectItem>
-                  <SelectItem value="other">Outra</SelectItem>
+                  <SelectItem value="meeting">
+                    <div className="flex items-center gap-2">
+                      <div className={cn("w-3 h-3 rounded-full", taskTypeColors.meeting)} />
+                      Reunião
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="content">
+                    <div className="flex items-center gap-2">
+                      <div className={cn("w-3 h-3 rounded-full", taskTypeColors.content)} />
+                      Criação de Conteúdo
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="prospecting">
+                    <div className="flex items-center gap-2">
+                      <div className={cn("w-3 h-3 rounded-full", taskTypeColors.prospecting)} />
+                      Prospecção
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="steps">
+                    <div className="flex items-center gap-2">
+                      <div className={cn("w-3 h-3 rounded-full", taskTypeColors.steps)} />
+                      Tarefa por Etapas
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="other">
+                    <div className="flex items-center gap-2">
+                      <div className={cn("w-3 h-3 rounded-full", taskTypeColors.other)} />
+                      Outra
+                    </div>
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -575,12 +731,98 @@ export default function Tarefas() {
               />
             </div>
 
+            {/* Steps Section - Only for "steps" type */}
+            {formData.task_type === 'steps' && (
+              <div className="space-y-3 p-4 bg-muted/50 rounded-lg">
+                <Label className="font-medium">Etapas da Tarefa</Label>
+                <div className="space-y-2">
+                  {taskSteps.map((step) => (
+                    <div key={step.id} className="flex items-center gap-2 p-2 bg-background rounded border">
+                      <Checkbox
+                        checked={step.completed}
+                        onCheckedChange={() => handleToggleStepInForm(step.id)}
+                      />
+                      <span className={cn("flex-1", step.completed && "line-through text-muted-foreground")}>
+                        {step.title}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleRemoveStep(step.id)}
+                      >
+                        <Trash2 className="w-4 h-4 text-destructive" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    value={newStepTitle}
+                    onChange={(e) => setNewStepTitle(e.target.value)}
+                    placeholder="Nova etapa..."
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddStep();
+                      }
+                    }}
+                  />
+                  <Button type="button" onClick={handleAddStep} disabled={!newStepTitle.trim()}>
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Salvando...' : editingTask ? 'Salvar Alterações' : 'Criar Tarefa'}
             </Button>
           </form>
         </SheetContent>
       </Sheet>
+
+      {/* Steps Dialog */}
+      <Dialog open={!!selectedTaskForSteps} onOpenChange={() => setSelectedTaskForSteps(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ListChecks className="w-5 h-5 text-primary" />
+              {selectedTaskForSteps?.title}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedTaskForSteps?.steps && (
+            <div className="space-y-2 mt-4">
+              {selectedTaskForSteps.steps.map((step) => (
+                <div
+                  key={step.id}
+                  className={cn(
+                    "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all",
+                    step.completed && "bg-success/10 border-success/30"
+                  )}
+                  onClick={() => handleToggleTaskStep(selectedTaskForSteps, step.id)}
+                >
+                  <div className={cn(
+                    "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all",
+                    step.completed ? "border-success bg-success" : "border-muted-foreground"
+                  )}>
+                    {step.completed && <CheckCircle2 className="w-4 h-4 text-white" />}
+                  </div>
+                  <span className={cn(
+                    "flex-1",
+                    step.completed && "line-through text-muted-foreground"
+                  )}>
+                    {step.title}
+                  </span>
+                </div>
+              ))}
+              <p className="text-xs text-muted-foreground text-center mt-4">
+                Clique em uma etapa para marcar/desmarcar
+              </p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation */}
       <AlertDialog open={!!deleteTaskId} onOpenChange={() => setDeleteTaskId(null)}>
