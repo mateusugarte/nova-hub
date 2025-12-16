@@ -61,9 +61,10 @@ import {
   TrendingUp,
   AlertCircle,
 } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, parseISO, isWithinInterval } from 'date-fns';
+import { format, startOfMonth, endOfMonth, parseISO, isWithinInterval, addMonths, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { Power, ChevronLeft, ChevronRight as ChevronRightIcon, CalendarDays } from 'lucide-react';
 
 interface Implementation {
   id: string;
@@ -148,6 +149,7 @@ export default function Implementacoes() {
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [dateFilter, setDateFilter] = useState<'all' | 'month' | 'custom'>('all');
+  const [metricsMonth, setMetricsMonth] = useState(new Date());
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
 
@@ -334,6 +336,22 @@ export default function Implementacoes() {
     setDeleteId(null);
   };
 
+  const handleToggleStatus = async (impl: Implementation, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newStatus = impl.status === 'active' ? 'inactive' : 'active';
+    const { error } = await supabase
+      .from('implementations')
+      .update({ status: newStatus })
+      .eq('id', impl.id);
+
+    if (error) {
+      toast({ title: 'Erro ao atualizar status', variant: 'destructive' });
+    } else {
+      toast({ title: `Implementação ${newStatus === 'active' ? 'ativada' : 'desativada'}` });
+      fetchData();
+    }
+  };
+
   const handleToggleStage = async (stage: Stage) => {
     const { error } = await supabase
       .from('implementation_stages')
@@ -486,10 +504,9 @@ export default function Implementacoes() {
   const activeCount = filteredImplementations.filter(i => i.status === 'active').length;
   const totalValue = filteredImplementations.reduce((acc, i) => acc + (i.implementation_value || 0), 0);
   
-  // Recurrence metrics
-  const currentMonth = new Date();
-  const monthStart = startOfMonth(currentMonth);
-  const monthEnd = endOfMonth(currentMonth);
+  // Recurrence metrics based on selected month
+  const metricsMonthStart = startOfMonth(metricsMonth);
+  const metricsMonthEnd = endOfMonth(metricsMonth);
   
   const totalRecurrenceExpected = filteredImplementations
     .filter(i => i.status === 'active' && i.recurrence_value)
@@ -498,7 +515,7 @@ export default function Implementacoes() {
   const allBillings = Object.values(billings).flat();
   const monthBillings = allBillings.filter(b => {
     const billingDate = parseISO(b.billing_date);
-    return isWithinInterval(billingDate, { start: monthStart, end: monthEnd });
+    return isWithinInterval(billingDate, { start: metricsMonthStart, end: metricsMonthEnd });
   });
   
   const receivedRecurrence = monthBillings.filter(b => b.is_paid).reduce((acc, b) => acc + b.amount, 0);
@@ -529,37 +546,78 @@ export default function Implementacoes() {
       </div>
 
       {/* Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
-        <MetricCard
-          title="Total"
-          value={filteredImplementations.length}
-          icon={<Package className="w-5 h-5" />}
-        />
-        <MetricCard
-          title="Ativas"
-          value={activeCount}
-          icon={<CheckCircle2 className="w-5 h-5" />}
-        />
-        <MetricCard
-          title="Valor Total"
-          value={`R$ ${totalValue.toLocaleString('pt-BR')}`}
-          icon={<DollarSign className="w-5 h-5" />}
-        />
-        <MetricCard
-          title="Recorrência Esperada"
-          value={`R$ ${totalRecurrenceExpected.toLocaleString('pt-BR')}`}
-          icon={<TrendingUp className="w-5 h-5" />}
-        />
-        <MetricCard
-          title="Recebido no Mês"
-          value={`R$ ${receivedRecurrence.toLocaleString('pt-BR')}`}
-          icon={<CheckCircle2 className="w-5 h-5" />}
-        />
-        <MetricCard
-          title="Pendente no Mês"
-          value={`R$ ${Math.max(0, pendingRecurrence).toLocaleString('pt-BR')}`}
-          icon={<AlertCircle className="w-5 h-5" />}
-        />
+      <div className="space-y-4">
+        {/* Month Selector for Metrics */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CalendarDays className="w-5 h-5 text-primary" />
+                <span className="font-medium">Métricas de Recorrência</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setMetricsMonth(subMonths(metricsMonth, 1))}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <span className="min-w-[140px] text-center font-medium capitalize">
+                  {format(metricsMonth, 'MMMM yyyy', { locale: ptBR })}
+                </span>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setMetricsMonth(addMonths(metricsMonth, 1))}
+                >
+                  <ChevronRightIcon className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setMetricsMonth(new Date())}
+                  className="ml-2"
+                >
+                  Hoje
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+          <MetricCard
+            title="Total"
+            value={filteredImplementations.length}
+            icon={<Package className="w-5 h-5" />}
+          />
+          <MetricCard
+            title="Ativas"
+            value={activeCount}
+            icon={<CheckCircle2 className="w-5 h-5" />}
+          />
+          <MetricCard
+            title="Valor Total"
+            value={`R$ ${totalValue.toLocaleString('pt-BR')}`}
+            icon={<DollarSign className="w-5 h-5" />}
+          />
+          <MetricCard
+            title="Recorrência Esperada"
+            value={`R$ ${totalRecurrenceExpected.toLocaleString('pt-BR')}`}
+            icon={<TrendingUp className="w-5 h-5" />}
+          />
+          <MetricCard
+            title={`Recebido em ${format(metricsMonth, 'MMM', { locale: ptBR })}`}
+            value={`R$ ${receivedRecurrence.toLocaleString('pt-BR')}`}
+            icon={<CheckCircle2 className="w-5 h-5" />}
+          />
+          <MetricCard
+            title={`Pendente em ${format(metricsMonth, 'MMM', { locale: ptBR })}`}
+            value={`R$ ${Math.max(0, pendingRecurrence).toLocaleString('pt-BR')}`}
+            icon={<AlertCircle className="w-5 h-5" />}
+          />
+        </div>
       </div>
 
       {/* Filters */}
@@ -637,6 +695,17 @@ export default function Implementacoes() {
                     </CardTitle>
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      title={impl.status === 'active' ? 'Desativar' : 'Ativar'}
+                      onClick={(e) => handleToggleStatus(impl, e)}
+                    >
+                      <Power className={cn(
+                        "w-4 h-4",
+                        impl.status === 'active' ? 'text-success' : 'text-muted-foreground'
+                      )} />
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"
