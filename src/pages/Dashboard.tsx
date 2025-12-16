@@ -4,7 +4,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import MetricCard from '@/components/dashboard/MetricCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { HoverBorderGradient } from '@/components/ui/hover-border-gradient';
+import { RealTimeAnalytics } from '@/components/ui/real-time-analytics';
 import {
   CheckSquare,
   Calendar,
@@ -13,15 +14,6 @@ import {
   Plus,
   Clock,
 } from 'lucide-react';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -183,6 +175,13 @@ export default function Dashboard() {
     ? Math.round((stats.prospectsConverted / stats.prospectsTotal) * 100)
     : 0;
 
+  // Convert chart data for RealTimeAnalytics component
+  const analyticsData = chartData.map((item, index) => ({
+    time: index,
+    value: item.completed,
+    label: item.day,
+  }));
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -200,10 +199,15 @@ export default function Dashboard() {
             Visão geral do seu dia
           </p>
         </div>
-        <Button onClick={() => navigate('/tarefas')} className="btn-scale">
-          <Plus className="w-4 h-4 mr-2" />
-          Nova Tarefa
-        </Button>
+        <HoverBorderGradient
+          onClick={() => navigate('/tarefas')}
+          containerClassName="cursor-pointer"
+        >
+          <span className="flex items-center gap-2">
+            <Plus className="w-4 h-4" />
+            Nova Tarefa
+          </span>
+        </HoverBorderGradient>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -235,49 +239,17 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-lg font-display">
-              Tarefas Concluídas (Últimos 7 dias)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis
-                    dataKey="day"
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={12}
-                  />
-                  <YAxis
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={12}
-                    allowDecimals={false}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'hsl(var(--card))',
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: 'var(--radius)',
-                    }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="completed"
-                    stroke="hsl(var(--primary))"
-                    strokeWidth={2}
-                    dot={{ fill: 'hsl(var(--primary))' }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="lg:col-span-2">
+          <RealTimeAnalytics
+            data={analyticsData}
+            title="Tarefas Concluídas"
+            subtitle="Últimos 7 dias"
+            animated={true}
+          />
+        </div>
 
         <div className="space-y-6">
-          <Card>
+          <Card className="bg-card/80 backdrop-blur-sm border-border/50">
             <CardHeader className="pb-3">
               <CardTitle className="text-lg font-display flex items-center gap-2">
                 <Clock className="w-5 h-5 text-primary" />
@@ -300,7 +272,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="bg-card/80 backdrop-blur-sm border-border/50">
             <CardHeader className="pb-3">
               <CardTitle className="text-lg font-display">
                 Planejamento Semanal
@@ -317,13 +289,13 @@ export default function Dashboard() {
                 >
                   {stats.weeklyPlanningDone ? 'Concluído' : 'Pendente'}
                 </span>
-                <Button
-                  variant="outline"
-                  size="sm"
+                <HoverBorderGradient
                   onClick={() => navigate('/tarefas')}
+                  containerClassName="cursor-pointer"
+                  className="text-sm px-3 py-1.5"
                 >
                   {stats.weeklyPlanningDone ? 'Ver' : 'Iniciar'}
-                </Button>
+                </HoverBorderGradient>
               </div>
             </CardContent>
           </Card>
