@@ -13,6 +13,7 @@ import {
 import DockMorph from '@/components/ui/dock-morph';
 import InfiniteGrid from '@/components/ui/infinite-grid';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
+import logo from '@/assets/logo.png';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -57,7 +58,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
       <div className="min-h-screen pb-24">
         <header className="sticky top-0 z-40 w-full border-b border-border/40 bg-background/80 backdrop-blur-lg">
           <div className="flex h-14 items-center justify-between px-6">
-            <h1 className="text-lg font-display text-primary">GetMore</h1>
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-full overflow-hidden border-2 border-primary/20 shadow-sm">
+                <img src={logo} alt="GetMore Logo" className="h-full w-full object-cover" />
+              </div>
+              <h1 className="text-lg font-display text-primary">GetMore</h1>
+            </div>
             <ThemeToggle />
           </div>
         </header>
