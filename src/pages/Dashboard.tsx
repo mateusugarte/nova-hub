@@ -4,6 +4,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import LoadingScreen from '@/components/ui/loading-screen';
 import {
   CheckSquare,
@@ -14,10 +17,34 @@ import {
   Package,
   ArrowRight,
   TrendingUp,
+  Clock,
+  Phone,
+  Link as LinkIcon,
+  ListChecks,
 } from 'lucide-react';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO, startOfDay, isBefore, isAfter, subMonths, subDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+
+interface TaskStep {
+  id: string;
+  title: string;
+  completed: boolean;
+}
+
+interface Task {
+  id: string;
+  title: string;
+  description: string | null;
+  task_type: string;
+  status: string;
+  scheduled_date: string;
+  scheduled_time: string | null;
+  duration_minutes: number | null;
+  contact_number: string | null;
+  meeting_link: string | null;
+  steps: TaskStep[] | null;
+}
 
 interface DashboardStats {
   tasksToday: number;
@@ -50,6 +77,26 @@ interface RecurrenceData {
   value: number;
 }
 
+const taskTypeLabels: Record<string, string> = {
+  meeting: 'Reunião',
+  call: 'Ligação',
+  content: 'Conteúdo',
+  prospecting: 'Prospecção',
+  implementation: 'Implementação',
+  study: 'Estudo',
+  other: 'Outro',
+};
+
+const taskTypeColors: Record<string, string> = {
+  meeting: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  call: 'bg-green-500/20 text-green-400 border-green-500/30',
+  content: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+  prospecting: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+  implementation: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+  study: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+  other: 'bg-muted text-muted-foreground border-border',
+};
+
 export default function Dashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -64,6 +111,8 @@ export default function Dashboard() {
   });
   const [chartData, setChartData] = useState<ChartData[]>([]);
   const [recurrenceData, setRecurrenceData] = useState<RecurrenceData[]>([]);
+  const [todayTasks, setTodayTasks] = useState<Task[]>([]);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -110,13 +159,14 @@ export default function Dashboard() {
     try {
       // Batch all queries in parallel
       const [
-        tasksToday,
+        tasksTodayCount,
         tasksCompletedToday,
         tasksCompletedWeek,
         prospectsTotal,
         prospectsConverted,
         implementationsData,
         tasksLast7Days,
+        tasksTodayData,
       ] = await Promise.all([
         supabase.from('tasks').select('*', { count: 'exact', head: true }).eq('user_id', user.id).eq('scheduled_date', todayStr),
         supabase.from('tasks').select('*', { count: 'exact', head: true }).eq('user_id', user.id).eq('scheduled_date', todayStr).eq('status', 'completed'),
@@ -125,9 +175,16 @@ export default function Dashboard() {
         supabase.from('prospects').select('*', { count: 'exact', head: true }).eq('user_id', user.id).eq('status', 'converted'),
         supabase.from('implementations').select('id, recurrence_value, recurrence_start_date, recurrence_end_date, status, delivery_completed, created_at').eq('user_id', user.id),
         supabase.from('tasks').select('scheduled_date').eq('user_id', user.id).eq('status', 'completed').gte('scheduled_date', last7Days[0]).lte('scheduled_date', last7Days[6]),
+        supabase.from('tasks').select('*').eq('user_id', user.id).eq('scheduled_date', todayStr).order('scheduled_time', { ascending: true, nullsFirst: false }),
       ]);
 
       const implementations = (implementationsData.data || []) as Implementation[];
+      
+      // Parse today's tasks with steps
+      const parsedTasks: Task[] = (tasksTodayData.data || []).map((t: any) => ({
+        ...t,
+        steps: t.steps ? (typeof t.steps === 'string' ? JSON.parse(t.steps) : t.steps) : null,
+      }));
       
       // Current month recurrence
       const totalRecurrence = implementations
@@ -165,7 +222,7 @@ export default function Dashboard() {
       });
 
       setStats({
-        tasksToday: tasksToday.count || 0,
+        tasksToday: tasksTodayCount.count || 0,
         tasksCompletedToday: tasksCompletedToday.count || 0,
         tasksCompletedWeek: tasksCompletedWeek.count || 0,
         prospectsTotal: prospectsTotal.count || 0,
@@ -174,6 +231,7 @@ export default function Dashboard() {
         deliveryPendingCount,
       });
 
+      setTodayTasks(parsedTasks);
       setChartData(chartDataProcessed);
       setRecurrenceData(recurrenceChartData);
     } catch (error) {
@@ -334,6 +392,53 @@ export default function Dashboard() {
         </Card>
       </div>
 
+      {/* Today's Tasks */}
+      {todayTasks.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-medium flex items-center gap-2">
+              <ListChecks className="w-4 h-4 text-primary" />
+              Tarefas de Hoje
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {todayTasks.map((task) => (
+                <div
+                  key={task.id}
+                  onClick={() => setSelectedTask(task)}
+                  className="flex items-center gap-3 p-3 rounded-lg border border-border/50 hover:border-primary/50 hover:bg-muted/50 cursor-pointer transition-colors"
+                >
+                  <div className={`w-2 h-2 rounded-full ${task.status === 'completed' ? 'bg-green-500' : 'bg-orange-500'}`} />
+                  <div className="flex-1 min-w-0">
+                    <p className={`font-medium truncate ${task.status === 'completed' ? 'line-through text-muted-foreground' : ''}`}>
+                      {task.title}
+                    </p>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      {task.scheduled_time && (
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {task.scheduled_time.slice(0, 5)}
+                        </span>
+                      )}
+                      {task.steps && task.steps.length > 0 && (
+                        <span className="flex items-center gap-1">
+                          <ListChecks className="w-3 h-3" />
+                          {task.steps.filter(s => s.completed).length}/{task.steps.length}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <Badge variant="outline" className={`text-xs ${taskTypeColors[task.task_type] || taskTypeColors.other}`}>
+                    {taskTypeLabels[task.task_type] || 'Outro'}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Quick actions */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>
@@ -378,6 +483,100 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Task Details Dialog */}
+      <Dialog open={!!selectedTask} onOpenChange={(open) => !open && setSelectedTask(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Badge variant="outline" className={`text-xs ${taskTypeColors[selectedTask?.task_type || 'other'] || taskTypeColors.other}`}>
+                {taskTypeLabels[selectedTask?.task_type || 'other'] || 'Outro'}
+              </Badge>
+              {selectedTask?.title}
+            </DialogTitle>
+          </DialogHeader>
+          
+          {selectedTask && (
+            <div className="space-y-4">
+              {/* Status */}
+              <div className="flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${selectedTask.status === 'completed' ? 'bg-green-500' : 'bg-orange-500'}`} />
+                <span className="text-sm text-muted-foreground">
+                  {selectedTask.status === 'completed' ? 'Concluída' : 'Pendente'}
+                </span>
+              </div>
+
+              {/* Time */}
+              {selectedTask.scheduled_time && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Clock className="w-4 h-4 text-muted-foreground" />
+                  <span>{selectedTask.scheduled_time.slice(0, 5)}</span>
+                  {selectedTask.duration_minutes && (
+                    <span className="text-muted-foreground">({selectedTask.duration_minutes} min)</span>
+                  )}
+                </div>
+              )}
+
+              {/* Contact */}
+              {selectedTask.contact_number && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Phone className="w-4 h-4 text-muted-foreground" />
+                  <a href={`tel:${selectedTask.contact_number}`} className="text-primary hover:underline">
+                    {selectedTask.contact_number}
+                  </a>
+                </div>
+              )}
+
+              {/* Meeting Link */}
+              {selectedTask.meeting_link && (
+                <div className="flex items-center gap-2 text-sm">
+                  <LinkIcon className="w-4 h-4 text-muted-foreground" />
+                  <a href={selectedTask.meeting_link} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate">
+                    {selectedTask.meeting_link}
+                  </a>
+                </div>
+              )}
+
+              {/* Description */}
+              {selectedTask.description && (
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Descrição</p>
+                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">{selectedTask.description}</p>
+                </div>
+              )}
+
+              {/* Steps */}
+              {selectedTask.steps && selectedTask.steps.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Etapas ({selectedTask.steps.filter(s => s.completed).length}/{selectedTask.steps.length})</p>
+                  <div className="space-y-2">
+                    {selectedTask.steps.map((step) => (
+                      <div key={step.id} className="flex items-center gap-2">
+                        <Checkbox checked={step.completed} disabled className="pointer-events-none" />
+                        <span className={`text-sm ${step.completed ? 'line-through text-muted-foreground' : ''}`}>
+                          {step.title}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Edit Button */}
+              <Button 
+                variant="outline" 
+                className="w-full" 
+                onClick={() => {
+                  setSelectedTask(null);
+                  navigate('/tarefas');
+                }}
+              >
+                Editar na página de Tarefas
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
