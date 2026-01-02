@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -41,10 +41,10 @@ import {
   Video,
   Image,
   MessageCircle,
+  Link,
 } from 'lucide-react';
 import MetricCard from '@/components/dashboard/MetricCard';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 
 interface ContentIdea {
@@ -86,8 +86,12 @@ export default function Postagens() {
   const [isIdeaFormOpen, setIsIdeaFormOpen] = useState(false);
   const [isPostFormOpen, setIsPostFormOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isMarkPostedDialogOpen, setIsMarkPostedDialogOpen] = useState(false);
   const [selectedIdea, setSelectedIdea] = useState<ContentIdea | null>(null);
   const [editingIdea, setEditingIdea] = useState<ContentIdea | null>(null);
+  const [editingPost, setEditingPost] = useState<PostedContent | null>(null);
+  const [markPostedLink, setMarkPostedLink] = useState('');
+  const [markPostedChannel, setMarkPostedChannel] = useState('instagram');
   const [ideaForm, setIdeaForm] = useState({
     title: '',
     description: '',
@@ -229,17 +233,28 @@ export default function Postagens() {
     }
   };
 
-  const handleMarkAsPosted = async (idea: ContentIdea) => {
+  const openMarkAsPostedDialog = (idea: ContentIdea) => {
+    setSelectedIdea(idea);
+    setMarkPostedLink(idea.reference_link || '');
+    setMarkPostedChannel('instagram');
+    setIsMarkPostedDialogOpen(true);
+  };
+
+  const handleMarkAsPosted = async () => {
+    if (!selectedIdea || !user) return;
+
+    setLoading(true);
     const now = new Date();
     
     // Update the idea as posted
     const { error: updateError } = await supabase
       .from('content_ideas')
       .update({ is_posted: true, posted_at: now.toISOString() })
-      .eq('id', idea.id);
+      .eq('id', selectedIdea.id);
 
     if (updateError) {
       toast({ title: 'Erro ao marcar como postada', variant: 'destructive' });
+      setLoading(false);
       return;
     }
 
@@ -247,14 +262,16 @@ export default function Postagens() {
     const { error: insertError } = await supabase
       .from('posted_content')
       .insert({
-        user_id: user!.id,
-        title: idea.title,
-        content_type: idea.content_type,
-        post_link: idea.reference_link || '',
-        channel: 'instagram',
+        user_id: user.id,
+        title: selectedIdea.title,
+        content_type: selectedIdea.content_type,
+        post_link: markPostedLink,
+        channel: markPostedChannel,
         posted_date: format(now, 'yyyy-MM-dd'),
-        content_idea_id: idea.id,
+        content_idea_id: selectedIdea.id,
       });
+
+    setLoading(false);
 
     if (insertError) {
       toast({ title: 'Erro ao registrar post', variant: 'destructive' });
@@ -262,6 +279,9 @@ export default function Postagens() {
     }
 
     toast({ title: 'Post registrado com sucesso!' });
+    setIsMarkPostedDialogOpen(false);
+    setSelectedIdea(null);
+    setMarkPostedLink('');
     fetchData();
   };
 
@@ -282,28 +302,83 @@ export default function Postagens() {
     }
   };
 
+  const handleCreatePost = () => {
+    setEditingPost(null);
+    setPostForm({
+      title: '',
+      content_type: 'feed',
+      post_link: '',
+      channel: 'instagram',
+      posted_date: format(new Date(), 'yyyy-MM-dd'),
+    });
+    setIsPostFormOpen(true);
+  };
+
+  const handleEditPost = (post: PostedContent) => {
+    setEditingPost(post);
+    setPostForm({
+      title: post.title,
+      content_type: post.content_type,
+      post_link: post.post_link,
+      channel: post.channel,
+      posted_date: post.posted_date,
+    });
+    setIsPostFormOpen(true);
+  };
+
   const handleSubmitPost = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
     setLoading(true);
 
-    const { error } = await supabase.from('posted_content').insert({
-      user_id: user.id,
-      title: postForm.title,
-      content_type: postForm.content_type,
-      post_link: postForm.post_link,
-      channel: postForm.channel,
-      posted_date: postForm.posted_date,
-    });
+    let error;
+    if (editingPost) {
+      const result = await supabase
+        .from('posted_content')
+        .update({
+          title: postForm.title,
+          content_type: postForm.content_type,
+          post_link: postForm.post_link,
+          channel: postForm.channel,
+          posted_date: postForm.posted_date,
+        })
+        .eq('id', editingPost.id);
+      error = result.error;
+    } else {
+      const result = await supabase.from('posted_content').insert({
+        user_id: user.id,
+        title: postForm.title,
+        content_type: postForm.content_type,
+        post_link: postForm.post_link,
+        channel: postForm.channel,
+        posted_date: postForm.posted_date,
+      });
+      error = result.error;
+    }
 
     setLoading(false);
 
     if (error) {
-      toast({ title: 'Erro ao registrar post', variant: 'destructive' });
+      toast({ title: 'Erro ao salvar post', variant: 'destructive' });
     } else {
-      toast({ title: 'Post registrado com sucesso' });
+      toast({ title: `Post ${editingPost ? 'atualizado' : 'registrado'} com sucesso` });
       setIsPostFormOpen(false);
+      setEditingPost(null);
+      fetchData();
+    }
+  };
+
+  const handleDeletePost = async (postId: string) => {
+    const { error } = await supabase
+      .from('posted_content')
+      .delete()
+      .eq('id', postId);
+
+    if (error) {
+      toast({ title: 'Erro ao excluir post', variant: 'destructive' });
+    } else {
+      toast({ title: 'Post excluído' });
       fetchData();
     }
   };
@@ -317,7 +392,7 @@ export default function Postagens() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-display text-foreground">Postagens</h1>
+          <h1 className="text-3xl font-display text-foreground">POSTAGENS</h1>
           <p className="text-muted-foreground mt-1">
             Gerencie suas ideias e histórico de posts
           </p>
@@ -380,7 +455,7 @@ export default function Postagens() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredIdeas.map((idea) => (
-                <Card key={idea.id} className="card-hover">
+                <Card key={idea.id} className="card-hover relative overflow-hidden group">
                   <CardContent className="p-5">
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex items-center gap-2">
@@ -422,7 +497,7 @@ export default function Postagens() {
                         variant="outline"
                         size="sm"
                         className="flex-1"
-                        onClick={() => handleMarkAsPosted(idea)}
+                        onClick={() => openMarkAsPostedDialog(idea)}
                       >
                         <Check className="w-4 h-4 mr-1" />
                         Postado
@@ -454,7 +529,7 @@ export default function Postagens() {
 
         <TabsContent value="history" className="mt-6 space-y-4">
           <div className="flex justify-end">
-            <Button onClick={() => setIsPostFormOpen(true)}>
+            <Button onClick={handleCreatePost}>
               <Plus className="w-4 h-4 mr-2" />
               Registrar Post
             </Button>
@@ -472,11 +547,11 @@ export default function Postagens() {
           ) : (
             <div className="space-y-3">
               {posts.map((post) => (
-                <Card key={post.id}>
+                <Card key={post.id} className="group">
                   <CardContent className="p-4 flex items-center gap-4">
                     <div
                       className={cn(
-                        'w-10 h-10 rounded-lg flex items-center justify-center text-white',
+                        'w-10 h-10 rounded-lg flex items-center justify-center text-white flex-shrink-0',
                         contentTypeColors[post.content_type]
                       )}
                     >
@@ -484,7 +559,7 @@ export default function Postagens() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="font-medium truncate">{post.title}</h3>
-                      <div className="flex items-center gap-2 mt-1">
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
                         <Badge variant="outline" className="capitalize text-xs">
                           {post.content_type}
                         </Badge>
@@ -496,14 +571,34 @@ export default function Postagens() {
                         </span>
                       </div>
                     </div>
-                    <a
-                      href={post.post_link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary hover:text-primary/80"
-                    >
-                      <ExternalLink className="w-5 h-5" />
-                    </a>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleEditPost(post)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDeletePost(post.id)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <Trash2 className="w-4 h-4 text-destructive" />
+                      </Button>
+                      {post.post_link && (
+                        <a
+                          href={post.post_link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:text-primary/80"
+                        >
+                          <ExternalLink className="w-5 h-5" />
+                        </a>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               ))}
@@ -517,7 +612,7 @@ export default function Postagens() {
         <SheetContent>
           <SheetHeader>
             <SheetTitle className="font-display">
-              {editingIdea ? 'Editar Ideia' : 'Nova Ideia'}
+              {editingIdea ? 'EDITAR IDEIA' : 'NOVA IDEIA'}
             </SheetTitle>
           </SheetHeader>
           <form onSubmit={handleSubmitIdea} className="space-y-6 mt-6">
@@ -586,7 +681,9 @@ export default function Postagens() {
       <Sheet open={isPostFormOpen} onOpenChange={setIsPostFormOpen}>
         <SheetContent>
           <SheetHeader>
-            <SheetTitle className="font-display">Registrar Post</SheetTitle>
+            <SheetTitle className="font-display">
+              {editingPost ? 'EDITAR POST' : 'REGISTRAR POST'}
+            </SheetTitle>
           </SheetHeader>
           <form onSubmit={handleSubmitPost} className="space-y-6 mt-6">
             <div className="space-y-2">
@@ -664,11 +761,61 @@ export default function Postagens() {
             </div>
 
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Salvando...' : 'Registrar Post'}
+              {loading ? 'Salvando...' : editingPost ? 'Atualizar Post' : 'Registrar Post'}
             </Button>
           </form>
         </SheetContent>
       </Sheet>
+
+      {/* Mark as Posted Dialog */}
+      <Dialog open={isMarkPostedDialogOpen} onOpenChange={setIsMarkPostedDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-display flex items-center gap-2">
+              <Link className="w-5 h-5 text-primary" />
+              Registrar Post
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              Informe o link onde o conteúdo foi postado:
+            </p>
+            <div className="space-y-2">
+              <Label>Link do Post *</Label>
+              <Input
+                value={markPostedLink}
+                onChange={(e) => setMarkPostedLink(e.target.value)}
+                placeholder="https://instagram.com/p/..."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Canal</Label>
+              <Select
+                value={markPostedChannel}
+                onValueChange={setMarkPostedChannel}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="instagram">Instagram</SelectItem>
+                  <SelectItem value="tiktok">TikTok</SelectItem>
+                  <SelectItem value="youtube">YouTube</SelectItem>
+                  <SelectItem value="other">Outro</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsMarkPostedDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleMarkAsPosted} disabled={loading}>
+              {loading ? 'Salvando...' : 'Confirmar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
