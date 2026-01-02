@@ -230,12 +230,38 @@ export default function Postagens() {
   };
 
   const handleMarkAsPosted = async (idea: ContentIdea) => {
-    await supabase
+    const now = new Date();
+    
+    // Update the idea as posted
+    const { error: updateError } = await supabase
       .from('content_ideas')
-      .update({ is_posted: true, posted_at: new Date().toISOString() })
+      .update({ is_posted: true, posted_at: now.toISOString() })
       .eq('id', idea.id);
 
-    toast({ title: 'Ideia marcada como postada' });
+    if (updateError) {
+      toast({ title: 'Erro ao marcar como postada', variant: 'destructive' });
+      return;
+    }
+
+    // Also create a record in posted_content
+    const { error: insertError } = await supabase
+      .from('posted_content')
+      .insert({
+        user_id: user!.id,
+        title: idea.title,
+        content_type: idea.content_type,
+        post_link: idea.reference_link || '',
+        channel: 'instagram',
+        posted_date: format(now, 'yyyy-MM-dd'),
+        content_idea_id: idea.id,
+      });
+
+    if (insertError) {
+      toast({ title: 'Erro ao registrar post', variant: 'destructive' });
+      return;
+    }
+
+    toast({ title: 'Post registrado com sucesso!' });
     fetchData();
   };
 
