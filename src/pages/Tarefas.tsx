@@ -53,6 +53,7 @@ import {
 } from 'lucide-react';
 import MetricCard from '@/components/dashboard/MetricCard';
 import PlanningWizard from '@/components/planning/PlanningWizard';
+import WeekSelectorDialog from '@/components/planning/WeekSelectorDialog';
 import {
   format,
   startOfWeek,
@@ -122,6 +123,8 @@ export default function Tarefas() {
   const [selectedDay, setSelectedDay] = useState(0);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isPlanningWizardOpen, setIsPlanningWizardOpen] = useState(false);
+  const [isWeekSelectorOpen, setIsWeekSelectorOpen] = useState(false);
+  const [selectedWeek, setSelectedWeek] = useState<{ start: Date; end: Date } | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
   const [selectedTaskForSteps, setSelectedTaskForSteps] = useState<Task | null>(null);
@@ -233,13 +236,25 @@ export default function Tarefas() {
     return tasks.filter((task) => task.scheduled_date === dateStr);
   };
 
-  const handleStartPlanning = async () => {
+  const handleStartPlanning = () => {
+    setIsWeekSelectorOpen(true);
+  };
+
+  const handleWeekSelected = async (weekStartDate: Date, weekEndDate: Date) => {
     if (!user) return;
 
-    const weekStartStr = format(weekStart, 'yyyy-MM-dd');
-    const weekEndStr = format(weekEnd, 'yyyy-MM-dd');
+    const weekStartStr = format(weekStartDate, 'yyyy-MM-dd');
+    const weekEndStr = format(weekEndDate, 'yyyy-MM-dd');
 
-    if (!weeklyPlanning) {
+    // Check if planning already exists for this week
+    const { data: existingPlanning } = await supabase
+      .from('weekly_planning')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('week_start', weekStartStr)
+      .maybeSingle();
+
+    if (!existingPlanning) {
       const { data } = await supabase
         .from('weekly_planning')
         .insert({
@@ -253,8 +268,11 @@ export default function Tarefas() {
       if (data) {
         setWeeklyPlanning(data);
       }
+    } else {
+      setWeeklyPlanning(existingPlanning);
     }
 
+    setSelectedWeek({ start: weekStartDate, end: weekEndDate });
     setIsPlanningWizardOpen(true);
   };
 
@@ -621,14 +639,24 @@ export default function Tarefas() {
         })}
       </Tabs>
 
+      {/* Week Selector Dialog */}
+      <WeekSelectorDialog
+        open={isWeekSelectorOpen}
+        onOpenChange={setIsWeekSelectorOpen}
+        onSelectWeek={handleWeekSelected}
+      />
+
       {/* Planning Wizard */}
-      {isPlanningWizardOpen && (
+      {isPlanningWizardOpen && selectedWeek && (
         <PlanningWizard
-          weekStart={weekStart}
-          weekEnd={weekEnd}
+          weekStart={selectedWeek.start}
+          weekEnd={selectedWeek.end}
           existingTasks={tasks}
           planningId={weeklyPlanning?.id || null}
-          onClose={() => setIsPlanningWizardOpen(false)}
+          onClose={() => {
+            setIsPlanningWizardOpen(false);
+            setSelectedWeek(null);
+          }}
           onComplete={handlePlanningComplete}
         />
       )}
