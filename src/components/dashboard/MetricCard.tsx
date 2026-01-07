@@ -7,7 +7,7 @@ interface MetricCardProps {
   title: string;
   value: string | number;
   subtitle?: string;
-  icon: ReactNode;
+  icon?: ReactNode;
   trend?: {
     value: number;
     isPositive: boolean;
@@ -86,13 +86,15 @@ export default function MetricCard({
                 </div>
               )}
             </div>
-            <motion.div 
-              className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-primary border border-primary/20 shadow-lg shadow-primary/10"
-              whileHover={{ rotate: 5, scale: 1.1 }}
-              transition={{ type: "spring", stiffness: 300 }}
-            >
-              {icon}
-            </motion.div>
+            {icon && (
+              <motion.div 
+                className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-primary border border-primary/20 shadow-lg shadow-primary/10"
+                whileHover={{ rotate: 5, scale: 1.1 }}
+                transition={{ type: "spring", stiffness: 300 }}
+              >
+                {icon}
+              </motion.div>
+            )}
           </div>
         </CardContent>
 

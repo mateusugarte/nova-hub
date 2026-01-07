@@ -336,6 +336,66 @@ export type Database = {
         }
         Relationships: []
       }
+      inbound_leads: {
+        Row: {
+          created_at: string | null
+          email: string | null
+          faturamento: string | null
+          id: string
+          instagram_link: string | null
+          meeting_date: string | null
+          nicho: string | null
+          nome_dono: string | null
+          nome_lead: string | null
+          notes: string | null
+          phone_number: string | null
+          principal_dor: string | null
+          socios: Json | null
+          source: string | null
+          status: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          email?: string | null
+          faturamento?: string | null
+          id?: string
+          instagram_link?: string | null
+          meeting_date?: string | null
+          nicho?: string | null
+          nome_dono?: string | null
+          nome_lead?: string | null
+          notes?: string | null
+          phone_number?: string | null
+          principal_dor?: string | null
+          socios?: Json | null
+          source?: string | null
+          status?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          email?: string | null
+          faturamento?: string | null
+          id?: string
+          instagram_link?: string | null
+          meeting_date?: string | null
+          nicho?: string | null
+          nome_dono?: string | null
+          nome_lead?: string | null
+          notes?: string | null
+          phone_number?: string | null
+          principal_dor?: string | null
+          socios?: Json | null
+          source?: string | null
+          status?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       operacoes: {
         Row: {
           banco: string
@@ -508,16 +568,21 @@ export type Database = {
           approach_description: string | null
           contact_summary: string | null
           created_at: string | null
+          faturamento: string | null
           has_meeting_scheduled: boolean | null
           id: string
           instagram_link: string | null
           meeting_date: string | null
           needs_follow_up: boolean | null
+          nicho: string | null
+          nome_dono: string | null
           objections: string | null
           phone_number: string | null
+          principal_dor: string | null
           profile_summary: string | null
           prospecting_method: string[] | null
           rejection_reason: string | null
+          socios: Json | null
           status: string
           updated_at: string | null
           user_id: string
@@ -527,16 +592,21 @@ export type Database = {
           approach_description?: string | null
           contact_summary?: string | null
           created_at?: string | null
+          faturamento?: string | null
           has_meeting_scheduled?: boolean | null
           id?: string
           instagram_link?: string | null
           meeting_date?: string | null
           needs_follow_up?: boolean | null
+          nicho?: string | null
+          nome_dono?: string | null
           objections?: string | null
           phone_number?: string | null
+          principal_dor?: string | null
           profile_summary?: string | null
           prospecting_method?: string[] | null
           rejection_reason?: string | null
+          socios?: Json | null
           status?: string
           updated_at?: string | null
           user_id: string
@@ -546,16 +616,21 @@ export type Database = {
           approach_description?: string | null
           contact_summary?: string | null
           created_at?: string | null
+          faturamento?: string | null
           has_meeting_scheduled?: boolean | null
           id?: string
           instagram_link?: string | null
           meeting_date?: string | null
           needs_follow_up?: boolean | null
+          nicho?: string | null
+          nome_dono?: string | null
           objections?: string | null
           phone_number?: string | null
+          principal_dor?: string | null
           profile_summary?: string | null
           prospecting_method?: string[] | null
           rejection_reason?: string | null
+          socios?: Json | null
           status?: string
           updated_at?: string | null
           user_id?: string

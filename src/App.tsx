@@ -13,6 +13,7 @@ import Agenda from "@/pages/Agenda";
 import Tarefas from "@/pages/Tarefas";
 import Postagens from "@/pages/Postagens";
 import Prospeccao from "@/pages/Prospeccao";
+import LeadsInbound from "@/pages/LeadsInbound";
 import Implementacoes from "@/pages/Implementacoes";
 import NotFound from "@/pages/NotFound";
 
@@ -94,6 +95,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Prospeccao />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/leads-inbound"
+        element={
+          <ProtectedRoute>
+            <LeadsInbound />
           </ProtectedRoute>
         }
       />
