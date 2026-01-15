@@ -57,6 +57,8 @@ import {
   PackageCheck,
   FileText,
   X,
+  MessageSquare,
+  Copy,
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, parseISO, isWithinInterval, addMonths, subMonths, isBefore, isAfter, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -107,6 +109,15 @@ interface Billing {
   is_paid: boolean;
 }
 
+interface Prompt {
+  id: string;
+  implementation_id: string;
+  title: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+}
+
 const defaultStages = [
   { name: 'Call de Alinhamento', order_index: 0 },
   { name: 'Call de Onboarding', order_index: 1 },
@@ -132,6 +143,7 @@ export default function Implementacoes() {
   const [feedbacks, setFeedbacks] = useState<Record<string, Feedback[]>>({});
   const [attachments, setAttachments] = useState<Record<string, Attachment[]>>({});
   const [billings, setBillings] = useState<Record<string, Billing[]>>({});
+  const [prompts, setPrompts] = useState<Record<string, Prompt[]>>({});
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -142,6 +154,8 @@ export default function Implementacoes() {
   const [newFeedback, setNewFeedback] = useState('');
   const [newStageName, setNewStageName] = useState('');
   const [activeTab, setActiveTab] = useState('stages');
+  const [newPrompt, setNewPrompt] = useState({ title: '', content: '' });
+  const [editingPrompt, setEditingPrompt] = useState<Prompt | null>(null);
   const [cancelRecurrenceOpen, setCancelRecurrenceOpen] = useState(false);
   const [cancelDate, setCancelDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   
@@ -185,17 +199,19 @@ export default function Implementacoes() {
     const implIds = (implData || []).map(i => i.id);
     
     if (implIds.length > 0) {
-      const [stagesRes, feedbacksRes, attachmentsRes, billingsRes] = await Promise.all([
+      const [stagesRes, feedbacksRes, attachmentsRes, billingsRes, promptsRes] = await Promise.all([
         supabase.from('implementation_stages').select('*').in('implementation_id', implIds).order('order_index'),
         supabase.from('implementation_feedbacks').select('*').in('implementation_id', implIds).order('created_at', { ascending: false }),
         supabase.from('implementation_attachments').select('*').in('implementation_id', implIds),
         supabase.from('implementation_billings').select('*').in('implementation_id', implIds).order('billing_date', { ascending: false }),
+        supabase.from('implementation_prompts').select('*').in('implementation_id', implIds).order('created_at', { ascending: false }),
       ]);
 
       const stagesMap: Record<string, Stage[]> = {};
       const feedbacksMap: Record<string, Feedback[]> = {};
       const attachmentsMap: Record<string, Attachment[]> = {};
       const billingsMap: Record<string, Billing[]> = {};
+      const promptsMap: Record<string, Prompt[]> = {};
 
       (stagesRes.data || []).forEach(s => {
         if (!stagesMap[s.implementation_id]) stagesMap[s.implementation_id] = [];
@@ -213,11 +229,16 @@ export default function Implementacoes() {
         if (!billingsMap[b.implementation_id]) billingsMap[b.implementation_id] = [];
         billingsMap[b.implementation_id].push(b);
       });
+      (promptsRes.data || []).forEach(p => {
+        if (!promptsMap[p.implementation_id]) promptsMap[p.implementation_id] = [];
+        promptsMap[p.implementation_id].push(p);
+      });
 
       setStages(stagesMap);
       setFeedbacks(feedbacksMap);
       setAttachments(attachmentsMap);
       setBillings(billingsMap);
+      setPrompts(promptsMap);
     }
     setLoading(false);
   };
@@ -404,6 +425,37 @@ export default function Implementacoes() {
   const handleDeleteAttachment = async (id: string) => {
     await supabase.from('implementation_attachments').delete().eq('id', id);
     fetchData();
+  };
+
+  const handleAddPrompt = async () => {
+    if (!selectedImpl || !newPrompt.title.trim() || !newPrompt.content.trim()) return;
+    await supabase.from('implementation_prompts').insert({
+      implementation_id: selectedImpl.id,
+      title: newPrompt.title,
+      content: newPrompt.content,
+    });
+    setNewPrompt({ title: '', content: '' });
+    fetchData();
+  };
+
+  const handleUpdatePrompt = async () => {
+    if (!editingPrompt || !editingPrompt.title.trim() || !editingPrompt.content.trim()) return;
+    await supabase.from('implementation_prompts').update({
+      title: editingPrompt.title,
+      content: editingPrompt.content,
+    }).eq('id', editingPrompt.id);
+    setEditingPrompt(null);
+    fetchData();
+  };
+
+  const handleDeletePrompt = async (id: string) => {
+    await supabase.from('implementation_prompts').delete().eq('id', id);
+    fetchData();
+  };
+
+  const handleCopyPrompt = (content: string) => {
+    navigator.clipboard.writeText(content);
+    toast({ title: 'Prompt copiado!' });
   };
 
   const isRecurrenceActiveForMonth = (impl: Implementation, monthDate: Date) => {
@@ -686,11 +738,12 @@ export default function Implementacoes() {
                 )}
 
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
-                  <TabsList className="w-full">
-                    <TabsTrigger value="stages" className="flex-1">Etapas</TabsTrigger>
-                    <TabsTrigger value="feedbacks" className="flex-1">Notas</TabsTrigger>
-                    <TabsTrigger value="billings" className="flex-1">Cobranças</TabsTrigger>
-                    <TabsTrigger value="docs" className="flex-1">Docs</TabsTrigger>
+                  <TabsList className="w-full grid grid-cols-5">
+                    <TabsTrigger value="stages">Etapas</TabsTrigger>
+                    <TabsTrigger value="prompts">Prompts</TabsTrigger>
+                    <TabsTrigger value="feedbacks">Notas</TabsTrigger>
+                    <TabsTrigger value="billings">Cobranças</TabsTrigger>
+                    <TabsTrigger value="docs">Docs</TabsTrigger>
                   </TabsList>
 
                   <TabsContent value="stages" className="space-y-3 mt-4">
@@ -714,6 +767,76 @@ export default function Implementacoes() {
                       <Input value={newStageName} onChange={(e) => setNewStageName(e.target.value)} placeholder="Nova etapa..." className="flex-1" />
                       <Button size="sm" onClick={handleAddStage}>Adicionar</Button>
                     </div>
+                  </TabsContent>
+
+                  <TabsContent value="prompts" className="space-y-3 mt-4">
+                    {editingPrompt ? (
+                      <div className="space-y-3 p-3 border rounded-lg">
+                        <div>
+                          <Label className="text-xs">Título</Label>
+                          <Input 
+                            value={editingPrompt.title} 
+                            onChange={(e) => setEditingPrompt({ ...editingPrompt, title: e.target.value })} 
+                            placeholder="Nome do prompt..."
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Conteúdo</Label>
+                          <Textarea 
+                            value={editingPrompt.content} 
+                            onChange={(e) => setEditingPrompt({ ...editingPrompt, content: e.target.value })} 
+                            placeholder="Conteúdo do prompt..." 
+                            rows={6}
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline" className="flex-1" onClick={() => setEditingPrompt(null)}>Cancelar</Button>
+                          <Button size="sm" className="flex-1" onClick={handleUpdatePrompt}>Salvar</Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {(prompts[selectedImpl.id] || []).map(p => (
+                          <div key={p.id} className="p-3 rounded border space-y-2">
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <p className="font-medium text-sm">{p.title}</p>
+                                <p className="text-xs text-muted-foreground">{format(parseISO(p.created_at), 'dd/MM/yy HH:mm')}</p>
+                              </div>
+                              <div className="flex gap-1">
+                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleCopyPrompt(p.content)}>
+                                  <Copy className="w-3 h-3" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditingPrompt(p)}>
+                                  <Edit className="w-3 h-3" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => handleDeletePrompt(p.id)}>
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            </div>
+                            <p className="text-sm whitespace-pre-wrap bg-muted/50 p-2 rounded text-muted-foreground">{p.content}</p>
+                          </div>
+                        ))}
+                        <div className="space-y-2 pt-2 border-t">
+                          <Input 
+                            value={newPrompt.title} 
+                            onChange={(e) => setNewPrompt({ ...newPrompt, title: e.target.value })} 
+                            placeholder="Título do prompt..."
+                          />
+                          <Textarea 
+                            value={newPrompt.content} 
+                            onChange={(e) => setNewPrompt({ ...newPrompt, content: e.target.value })} 
+                            placeholder="Conteúdo do prompt..." 
+                            rows={4}
+                          />
+                          <Button size="sm" className="w-full" onClick={handleAddPrompt}>
+                            <Plus className="w-4 h-4 mr-1" />
+                            Adicionar Prompt
+                          </Button>
+                        </div>
+                      </>
+                    )}
                   </TabsContent>
 
                   <TabsContent value="feedbacks" className="space-y-3 mt-4">

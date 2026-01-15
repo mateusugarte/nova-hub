@@ -244,6 +244,41 @@ export type Database = {
           },
         ]
       }
+      implementation_prompts: {
+        Row: {
+          content: string
+          created_at: string | null
+          id: string
+          implementation_id: string
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          content: string
+          created_at?: string | null
+          id?: string
+          implementation_id: string
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          id?: string
+          implementation_id?: string
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "implementation_prompts_implementation_id_fkey"
+            columns: ["implementation_id"]
+            isOneToOne: false
+            referencedRelation: "implementations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       implementation_stages: {
         Row: {
           completed_at: string | null
