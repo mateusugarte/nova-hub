@@ -8,6 +8,7 @@ import {
   FileText,
   Users,
   Package,
+  Brain,
   LogOut,
 } from 'lucide-react';
 import DockMorph from '@/components/ui/dock-morph';
@@ -23,6 +24,7 @@ const navigation = [
   { name: 'Prospecção', href: '/prospeccao', icon: Users },
   { name: 'Leads Inbound', href: '/leads-inbound', icon: Users },
   { name: 'Implementações', href: '/implementacoes', icon: Package },
+  { name: 'Pensamentos', href: '/pensamentos', icon: Brain },
 ];
 
 interface AppLayoutProps {
